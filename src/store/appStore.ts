@@ -25,6 +25,7 @@ export interface AppSettings {
   apiKey: string
   model: string
   voiceName: string
+  voiceLang: string
   speechRate: number
   speechPitch: number
   speechVolume: number
@@ -65,6 +66,7 @@ const defaultSettings: AppSettings = {
   apiKey: '',
   model: 'gpt-4o-mini',
   voiceName: '',
+  voiceLang: 'zh-CN',
   speechRate: 0.85,
   speechPitch: 1,
   speechVolume: 1,
