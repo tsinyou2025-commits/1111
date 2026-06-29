@@ -17,6 +17,10 @@ release-server
 # 脚本（含 token，请勿提交）
 scripts
 
+# Capacitor 原生平台（自动生成）
+android
+ios
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
