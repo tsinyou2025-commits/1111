@@ -8,7 +8,7 @@ export function getApiBaseUrl(): string {
     return 'http://localhost:3001'
   }
   if (isCapacitor) {
-    return 'https://long-night-stories.vercel.app'
+    return 'https://1111-two-iota.vercel.app'
   }
   return ''
 }
