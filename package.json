@@ -17,7 +17,9 @@
     "electron:build:server": "esbuild api-express/server.ts --bundle --platform=node --format=cjs --outfile=release-server/server.cjs",
     "electron:build": "npm run build && npm run electron:build:server && electron-builder --publish never",
     "electron:build:win": "npm run build && npm run electron:build:server && electron-builder --win --x64 --publish never",
-    "electron:dist": "npm run build && npm run electron:build:server && electron-builder --win --x64 --publish always"
+    "electron:dist": "npm run build && npm run electron:build:server && electron-builder --win --x64 --publish always",
+    "cap:sync": "npm run build && npx cap sync",
+    "cap:android": "npm run build && npx cap sync android && npx cap open android"
   },
   "dependencies": {
     "@capacitor-community/text-to-speech": "^5.1.0",
