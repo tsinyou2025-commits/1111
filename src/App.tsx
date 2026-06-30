@@ -19,6 +19,7 @@ function AppContent() {
       <main className="relative z-10">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/player" element={<div />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/history" element={<History />} />
         </Routes>

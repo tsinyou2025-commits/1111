@@ -69,9 +69,11 @@ export default function Player() {
 
   useEffect(() => {
     if (!currentStory.theme || !currentStory.id) {
-      navigate('/')
+      if (location.pathname === '/player') {
+        navigate('/')
+      }
     }
-  }, [currentStory.theme, currentStory.id, navigate])
+  }, [currentStory.theme, currentStory.id, navigate, location.pathname])
 
   // 故事切换时：重置状态，生成第一章
   useEffect(() => {
