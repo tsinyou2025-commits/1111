@@ -107,15 +107,17 @@ export function useSpeech(): UseSpeechReturn {
           URL.revokeObjectURL(url)
           resolve()
         }
-        audio.onerror = () => {
+        audio.onerror = (e) => {
           URL.revokeObjectURL(url)
-          resolve() // Ignore errors and continue to next sentence
+          const errorMsg = audio.error ? `Code: ${audio.error.code}, Msg: ${audio.error.message}` : '未知播放器错误'
+          alert('音频解码/播放失败: ' + errorMsg)
+          resolve()
         }
         
         await audio.play()
       } catch (e: any) {
         console.error('TTS Fetch Error', e)
-        alert('播放失败: ' + e.message)
+        alert('接口请求失败: ' + e.message)
         resolve()
       }
     })

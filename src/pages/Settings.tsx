@@ -507,7 +507,10 @@ export default function Settings() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-400">当前版本</span>
-                <span className="text-sm text-white font-mono">v{appVersion || '...'}</span>
+                <div className="text-right">
+                  <div className="text-sm text-white font-mono">v{appVersion || '网页版'}</div>
+                  <div className="text-xs text-amber-500/80 mt-1">内核: 06-30 12:05</div>
+                </div>
               </div>
 
               {updateStatus === 'idle' && (
