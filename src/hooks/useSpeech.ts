@@ -48,7 +48,25 @@ export function useSpeech(): UseSpeechReturn {
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
+    // 移动端 Safari/Chrome 必须由用户手势触发一次播放，才能在后续异步操作中自动播放
+    const unlockAudio = () => {
+      if (!audioRef.current) {
+        audioRef.current = new Audio()
+      }
+      // 播放一段极短的静音 base64 mp3
+      audioRef.current.src = 'data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq'
+      audioRef.current.play().catch(() => {})
+      
+      document.removeEventListener('touchstart', unlockAudio)
+      document.removeEventListener('click', unlockAudio)
+    }
+
+    document.addEventListener('touchstart', unlockAudio, { once: true })
+    document.addEventListener('click', unlockAudio, { once: true })
+
     return () => {
+      document.removeEventListener('touchstart', unlockAudio)
+      document.removeEventListener('click', unlockAudio)
       if (audioRef.current) {
         audioRef.current.pause()
         audioRef.current.src = ''
