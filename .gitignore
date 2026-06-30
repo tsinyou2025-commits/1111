@@ -32,3 +32,6 @@ ios
 *.sln
 *.sw?
 .vite
+jdk17/
+jdk17.zip
+*.zip
