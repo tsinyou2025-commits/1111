@@ -5,7 +5,7 @@ import { useSpeech } from '@/hooks/useSpeech'
 import { cn } from '@/lib/utils'
 import { getApiUrl, isElectron, isCapacitor } from '@/utils/apiBase'
 import { App as CapacitorApp } from '@capacitor/app'
-import { Browser } from '@capacitor/browser'
+
 
 interface ProviderConfig {
   id: string
@@ -198,14 +198,15 @@ export default function Settings() {
     if (isElectron) {
       setUpdateStatus('downloading')
       await (window as any).electronAPI.downloadUpdate()
-    } else if (isCapacitor && updateInfo?.url) {
+    } else if (isCapacitor && (updateInfo?.apkUrl || updateInfo?.url)) {
+      const downloadUrl = updateInfo.apkUrl || updateInfo.url
       setUpdateStatus('downloading')
-      // 监听浏览器关闭事件 —— 用户关闭下载页即视为下载完成
-      const listener = await Browser.addListener('browserFinished', () => {
-        setUpdateStatus('downloaded')
-        listener.remove()
-      })
-      await Browser.open({ url: updateInfo.apkUrl || updateInfo.url })
+      // 用系统浏览器（真实的 Chrome / 系统下载器）打开，
+      // 这样 APK 会正确写入手机的"下载"目录
+      await CapacitorApp.openUrl({ url: downloadUrl })
+      // 系统浏览器在后台运行，用户切回 App 时即视为"已发起下载"
+      // 给用户显示安装引导
+      setTimeout(() => setUpdateStatus('downloaded'), 1500)
     }
   }
 
