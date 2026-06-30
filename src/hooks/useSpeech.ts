@@ -76,50 +76,58 @@ export function useSpeech(): UseSpeechReturn {
     }
   }, [])
 
-  const playEdgeTTS = async (text: string): Promise<void> => {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const response = await fetch(getApiUrl('/api/tts'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text,
-            voice: settings.voiceName || 'zh-CN-YunxiNeural',
-            rate: settings.speechRate,
-            pitch: settings.speechPitch,
+  const playEdgeTTS = async (text: string, retries = 2): Promise<void> => {
+    return new Promise(async (resolve) => {
+      const attempt = async (retriesLeft: number) => {
+        try {
+          const response = await fetch(getApiUrl('/api/tts'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text,
+              voice: settings.voiceName || 'zh-CN-YunxiNeural',
+              rate: settings.speechRate,
+              pitch: settings.speechPitch,
+            })
           })
-        })
 
-        if (!response.ok) throw new Error('TTS API Error')
+          if (!response.ok) throw new Error(`TTS API Error ${response.status}`)
 
-        const blob = await response.blob()
-        const url = URL.createObjectURL(blob)
+          const blob = await response.blob()
+          const url = URL.createObjectURL(blob)
 
-        if (!audioRef.current) {
-          audioRef.current = new Audio()
+          if (!audioRef.current) {
+            audioRef.current = new Audio()
+          }
+
+          const audio = audioRef.current
+          audio.src = url
+          audio.volume = settings.speechVolume
+
+          audio.onended = () => {
+            URL.revokeObjectURL(url)
+            resolve()
+          }
+          audio.onerror = () => {
+            URL.revokeObjectURL(url)
+            // 播放失败时静默跳过，不中断流程
+            resolve()
+          }
+
+          await audio.play()
+        } catch (e: any) {
+          if (retriesLeft > 0) {
+            // 等待2秒后重试
+            await new Promise(r => setTimeout(r, 2000))
+            await attempt(retriesLeft - 1)
+          } else {
+            // 重试全部失败后静默跳过本句，不 alert
+            console.warn('[TTS] 跳过句子（重试耗尽）:', text.slice(0, 20))
+            resolve()
+          }
         }
-        
-        const audio = audioRef.current
-        audio.src = url
-        audio.volume = settings.speechVolume
-        
-        audio.onended = () => {
-          URL.revokeObjectURL(url)
-          resolve()
-        }
-        audio.onerror = (e) => {
-          URL.revokeObjectURL(url)
-          const errorMsg = audio.error ? `Code: ${audio.error.code}, Msg: ${audio.error.message}` : '未知播放器错误'
-          alert('音频解码/播放失败: ' + errorMsg)
-          resolve()
-        }
-        
-        await audio.play()
-      } catch (e: any) {
-        console.error('TTS Fetch Error', e)
-        alert('接口请求失败: ' + e.message)
-        resolve()
       }
+      await attempt(retries)
     })
   }
 

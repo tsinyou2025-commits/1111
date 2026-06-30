@@ -257,6 +257,24 @@ export default function Player() {
     setShowChapters(false)
   }
 
+  // 点击目录条目：直接切换播放
+  const handleSwitchAndPlayChapter = (index: number) => {
+    const chapter = currentStory.chapters[index]
+    if (!chapter) return
+    setShowChapters(false)
+    setViewingChapterIndex(index)
+    if (chapter.status === 'completed' && chapter.content) {
+      stop()
+      setCurrentStory({ currentChapterIndex: index, isPlaying: true })
+      speakingChapterRef.current = index
+      setTimeout(() => speak(chapter.content), 100)
+    } else if (chapter.status === 'pending') {
+      stop()
+      setCurrentStory({ currentChapterIndex: index, isPlaying: true })
+      generateChapter(index)
+    }
+  }
+
   const handleRetryChapter = () => {
     if (viewingChapter) {
       generateChapter(viewingChapterIndex)
@@ -382,12 +400,12 @@ export default function Player() {
         {/* 桌面端目录侧栏 */}
         <div className="hidden md:block w-72 border-r border-slate-800/50 overflow-y-auto">
           <div className="p-4">
-            <h3 className="text-sm font-medium text-slate-400 mb-3 px-2">章节目录</h3>
+            <h3 className="text-sm font-medium text-slate-400 mb-3 px-2">章节目录 <span className="text-xs text-slate-600">（点击切换播放）</span></h3>
             <div className="space-y-1">
               {currentStory.chapters.map((chapter, idx) => (
                 <button
                   key={idx}
-                  onClick={() => handleJumpToChapter(idx)}
+                  onClick={() => handleSwitchAndPlayChapter(idx)}
                   className={cn(
                     'w-full text-left px-3 py-3 rounded-xl transition-all flex items-start gap-3 group',
                     idx === currentStory.currentChapterIndex
@@ -494,11 +512,18 @@ export default function Player() {
                         <span
                           key={idx}
                           data-sentence-active={viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence}
+                          onClick={() => {
+                            // 点击任意句子，从该句开始播放
+                            stop()
+                            setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true })
+                            speakingChapterRef.current = viewingChapterIndex
+                            setTimeout(() => speak(viewingChapter.content, idx), 100)
+                          }}
                           className={cn(
-                            'transition-colors duration-300',
+                            'transition-colors duration-300 cursor-pointer rounded px-0.5',
                             viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence
-                              ? 'text-amber-300 bg-amber-500/10 rounded px-1'
-                              : ''
+                              ? 'text-amber-300 bg-amber-500/10'
+                              : 'hover:bg-slate-700/40 hover:text-slate-100'
                           )}
                         >
                           {s}
@@ -538,7 +563,10 @@ export default function Player() {
           <div className="absolute inset-0 bg-black/60" onClick={() => setShowChapters(false)} />
           <div className="absolute right-0 top-0 bottom-0 w-80 max-w-[85%] bg-slate-900 border-l border-slate-700/50 overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-slate-800/50">
-              <h3 className="text-white font-medium">章节目录</h3>
+              <div>
+                <h3 className="text-white font-medium">章节目录</h3>
+                <p className="text-xs text-slate-500 mt-0.5">点击章节直接切换播放</p>
+              </div>
               <button onClick={() => setShowChapters(false)} className="text-slate-400 hover:text-white">
                 <X size={20} />
               </button>
@@ -547,7 +575,7 @@ export default function Player() {
               {currentStory.chapters.map((chapter, idx) => (
                 <button
                   key={idx}
-                  onClick={() => handleJumpToChapter(idx)}
+                  onClick={() => handleSwitchAndPlayChapter(idx)}
                   className={cn(
                     'w-full text-left px-3 py-3 rounded-xl transition-all flex items-start gap-3',
                     idx === currentStory.currentChapterIndex
@@ -573,6 +601,9 @@ export default function Player() {
                       <p className="text-xs text-slate-500 mt-1 line-clamp-2">
                         {chapter.summary}
                       </p>
+                    )}
+                    {idx === currentStory.currentChapterIndex && (
+                      <p className="text-xs text-amber-500/70 mt-1">▶ 当前播放</p>
                     )}
                   </div>
                 </button>
