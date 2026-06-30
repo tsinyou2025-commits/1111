@@ -25,6 +25,7 @@ const presetThemes = [
 ]
 
 const defaultStyleOptions = [
+  { id: 'documentary', name: '人文专栏', desc: '无废话·高信息密度·结构清晰', icon: '📝' },
   { id: 'arthistory', name: '艺术史', desc: '建筑·人物·神秘学', icon: '🏛️' },
   { id: 'fantasy', name: '奇幻冒险', desc: '魔法与异世界之旅', icon: '✨' },
   { id: 'knowledge', name: '知识科普', desc: '生动有趣的知识讲解', icon: '📚' },
