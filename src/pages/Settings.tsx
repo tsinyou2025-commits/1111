@@ -184,6 +184,9 @@ export default function Settings() {
           } else {
             setUpdateStatus('not-available')
           }
+        } else {
+          // GitHub API 返回了 404 (通常是因为私有仓库没有权限)
+          setUpdateStatus('error')
         }
       } catch (e) {
         setUpdateStatus('error')
