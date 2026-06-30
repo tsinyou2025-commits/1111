@@ -199,6 +199,12 @@ export default function Settings() {
       setUpdateStatus('downloading')
       await (window as any).electronAPI.downloadUpdate()
     } else if (isCapacitor && updateInfo?.url) {
+      setUpdateStatus('downloading')
+      // 监听浏览器关闭事件 —— 用户关闭下载页即视为下载完成
+      const listener = await Browser.addListener('browserFinished', () => {
+        setUpdateStatus('downloaded')
+        listener.remove()
+      })
       await Browser.open({ url: updateInfo.apkUrl || updateInfo.url })
     }
   }
@@ -586,6 +592,21 @@ export default function Settings() {
                 </div>
               )}
 
+              {updateStatus === 'downloading' && isCapacitor && (
+                <div className="space-y-3">
+                  <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                    <div className="flex items-center gap-2 text-amber-300 mb-3">
+                      <Download size={16} className="animate-bounce" />
+                      <span className="text-sm font-medium">APK 下载中...</span>
+                    </div>
+                    <p className="text-xs text-amber-200/70 leading-relaxed">
+                      正在系统浏览器中下载安装包，请稍候。
+                      下载完成后，<span className="text-amber-300 font-medium">关闭浏览器</span>即可进入安装引导。
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {updateStatus === 'downloaded' && !isCapacitor && (
                 <div className="space-y-3">
                   <div className="py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center">
@@ -599,6 +620,30 @@ export default function Settings() {
                     className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all flex items-center justify-center gap-2"
                   >
                     立即安装更新
+                  </button>
+                </div>
+              )}
+
+              {updateStatus === 'downloaded' && isCapacitor && (
+                <div className="space-y-3">
+                  <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                    <div className="flex items-center gap-2 text-emerald-300 mb-3">
+                      <CheckCircle size={16} />
+                      <span className="text-sm font-medium">下载完成，请手动安装</span>
+                    </div>
+                    <ol className="text-xs text-emerald-200/70 leading-relaxed space-y-1.5">
+                      <li>1. 下拉手机<span className="text-emerald-300 font-medium">通知栏</span>，找到刚刚下载的 APK 文件</li>
+                      <li>2. 点击该通知，系统会弹出安装界面</li>
+                      <li>3. 如提示"未知来源"，请允许安装并继续</li>
+                      <li>4. 安装完成后重新打开 App 即可</li>
+                    </ol>
+                  </div>
+                  <button
+                    onClick={() => { setUpdateStatus('idle') }}
+                    className="w-full py-3 rounded-xl bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-all flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle size={16} />
+                    我已安装完成
                   </button>
                 </div>
               )}
