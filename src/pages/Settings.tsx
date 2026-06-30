@@ -383,7 +383,7 @@ export default function Settings() {
             <div>
               <label className="text-sm text-slate-400 mb-3 block flex items-center gap-2">
                 <Mic size={14} />
-                选择语音
+                选择语音 (微软云端语音)
                 <span className="text-xs text-slate-500">（共 {availableVoices.length} 个）</span>
               </label>
               
@@ -399,29 +399,12 @@ export default function Settings() {
                 >
                   {testingVoice ? '停止试听' : '试听当前'}
                 </button>
-                {availableVoices.length === 0 && (
-                  <span className="text-xs text-amber-400">正在加载语音列表...</span>
-                )}
               </div>
 
               <div className="max-h-64 overflow-y-auto space-y-1 border border-slate-700/50 rounded-xl p-2">
-                <button
-                  onClick={() => setLocalSettings({ ...localSettings, voiceName: '' })}
-                  className={cn(
-                    'w-full text-left px-3 py-2.5 rounded-lg transition-all',
-                    localSettings.voiceName === ''
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                      : 'hover:bg-slate-800/50 text-slate-300'
-                  )}
-                >
-                  <div className="text-sm font-medium">默认语音</div>
-                  <div className="text-xs text-slate-500">使用系统默认语音引擎</div>
-                </button>
-
-                {chineseVoices.length > 0 && (
+                {availableVoices.length > 0 && (
                   <div className="pt-2">
-                    <div className="px-2 py-1 text-xs text-slate-500 font-medium">中文语音</div>
-                    {chineseVoices.map((voice) => (
+                    {availableVoices.map((voice) => (
                       <button
                         key={voice.name}
                         onClick={() => setLocalSettings({ ...localSettings, voiceName: voice.name })}
@@ -432,36 +415,10 @@ export default function Settings() {
                             : 'hover:bg-slate-800/50 text-slate-300'
                         )}
                       >
-                        <div className="text-sm font-medium truncate">{voice.name}</div>
+                        <div className="text-sm font-medium truncate">{voice.label || voice.name}</div>
                         <div className="text-xs text-slate-500 flex items-center gap-2">
                           <span>{voice.lang}</span>
-                          {voice.default && <span className="text-amber-400">· 默认</span>}
-                          {voice.localService && <span className="text-emerald-400">· 本地</span>}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {otherVoices.length > 0 && (
-                  <div className="pt-2">
-                    <div className="px-2 py-1 text-xs text-slate-500 font-medium">其他语音</div>
-                    {otherVoices.map((voice) => (
-                      <button
-                        key={voice.name}
-                        onClick={() => setLocalSettings({ ...localSettings, voiceName: voice.name })}
-                        className={cn(
-                          'w-full text-left px-3 py-2.5 rounded-lg transition-all',
-                          localSettings.voiceName === voice.name
-                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                            : 'hover:bg-slate-800/50 text-slate-300'
-                        )}
-                      >
-                        <div className="text-sm font-medium truncate">{voice.name}</div>
-                        <div className="text-xs text-slate-500 flex items-center gap-2">
-                          <span>{voice.lang}</span>
-                          {voice.default && <span className="text-amber-400">· 默认</span>}
-                          {voice.localService && <span className="text-emerald-400">· 本地</span>}
+                          <span className="text-emerald-400">· 微软高品质接口</span>
                         </div>
                       </button>
                     ))}

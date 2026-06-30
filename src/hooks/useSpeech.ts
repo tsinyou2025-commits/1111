@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '@/store/appStore'
-import { Capacitor } from '@capacitor/core'
-import { TextToSpeech } from '@capacitor-community/text-to-speech'
 
 interface VoiceInfo {
   name: string
   lang: string
-  default?: boolean
-  localService?: boolean
+  label: string
 }
+
+const EDGE_VOICES: VoiceInfo[] = [
+  { name: 'zh-CN-YunxiNeural', lang: 'zh-CN', label: '云希 - 磁性男声 (推荐)' },
+  { name: 'zh-CN-YunyeNeural', lang: 'zh-CN', label: '云野 - 沉稳男声' },
+  { name: 'zh-CN-XiaoxiaoNeural', lang: 'zh-CN', label: '晓晓 - 温柔女声' },
+  { name: 'zh-CN-XiaoyiNeural', lang: 'zh-CN', label: '晓伊 - 亲切女声' },
+  { name: 'zh-CN-YunjianNeural', lang: 'zh-CN', label: '云健 - 影视解说男声' },
+]
 
 interface UseSpeechReturn {
   isSpeaking: boolean
@@ -23,8 +28,6 @@ interface UseSpeechReturn {
   speakSentence: (sentence: string) => void
 }
 
-const isCapacitorNative = Capacitor.isNativePlatform()
-
 function splitSentences(text: string): string[] {
   const sentences = text.match(/[^。！？.!?]+[。！？.!?]+/g) || [text]
   return sentences.filter((s) => s.trim().length > 0)
@@ -36,55 +39,67 @@ export function useSpeech(): UseSpeechReturn {
   const [isPaused, setIsPaused] = useState(false)
   const [currentSentence, setCurrentSentence] = useState('')
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0)
-  const [availableVoices, setAvailableVoices] = useState<VoiceInfo[]>([])
 
   const sentencesRef = useRef<string[]>([])
   const currentIndexRef = useRef(0)
   const speakingRef = useRef(false)
   const pausedRef = useRef(false)
   const stoppedRef = useRef(true)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
-    const loadVoices = async () => {
-      if (isCapacitorNative) {
-        try {
-          const result = await TextToSpeech.getSupportedVoices()
-          const voices: VoiceInfo[] = (result.voices || []).map((v: any) => ({
-            name: v.name,
-            lang: v.lang,
-            default: v.default,
-            localService: v.localService,
-          }))
-          setAvailableVoices(voices)
-        } catch (e) {
-          console.error('加载语音列表失败', e)
-        }
-      } else {
-        const voices = window.speechSynthesis.getVoices()
-        setAvailableVoices(voices.map((v) => ({
-          name: v.name,
-          lang: v.lang,
-          default: v.default,
-          localService: v.localService,
-        })))
-      }
-    }
-
-    loadVoices()
-
-    if (!isCapacitorNative) {
-      const loadWebVoices = () => loadVoices()
-      if (window.speechSynthesis.onvoiceschanged !== undefined) {
-        window.speechSynthesis.onvoiceschanged = loadWebVoices
-      }
-      const timer = setTimeout(loadWebVoices, 1000)
-      const timer2 = setTimeout(loadWebVoices, 3000)
-      return () => {
-        clearTimeout(timer)
-        clearTimeout(timer2)
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+        audioRef.current = null
       }
     }
   }, [])
+
+  const playEdgeTTS = async (text: string): Promise<void> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const response = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            voice: settings.voiceName || 'zh-CN-YunxiNeural',
+            rate: settings.speechRate,
+            pitch: settings.speechPitch,
+          })
+        })
+
+        if (!response.ok) throw new Error('TTS API Error')
+
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+
+        if (!audioRef.current) {
+          audioRef.current = new Audio()
+        }
+        
+        const audio = audioRef.current
+        audio.src = url
+        audio.volume = settings.speechVolume
+        
+        audio.onended = () => {
+          URL.revokeObjectURL(url)
+          resolve()
+        }
+        audio.onerror = () => {
+          URL.revokeObjectURL(url)
+          resolve() // Ignore errors and continue to next sentence
+        }
+        
+        await audio.play()
+      } catch (e) {
+        console.error('TTS Fetch Error', e)
+        resolve()
+      }
+    })
+  }
 
   const speakNext = useCallback(async () => {
     if (stoppedRef.current) return
@@ -102,37 +117,7 @@ export function useSpeech(): UseSpeechReturn {
     setCurrentSentenceIndex(currentIndexRef.current)
 
     try {
-      if (isCapacitorNative) {
-        const voiceIndex = settings.voiceName
-          ? availableVoices.findIndex((v) => v.name === settings.voiceName)
-          : -1
-        await TextToSpeech.speak({
-          text: sentence,
-          lang: settings.voiceLang || 'zh-CN',
-          rate: settings.speechRate,
-          pitch: settings.speechPitch,
-          volume: settings.speechVolume,
-          ...(voiceIndex >= 0 ? { voice: voiceIndex } : {}),
-        })
-      } else {
-        await new Promise<void>((resolve) => {
-          const utterance = new SpeechSynthesisUtterance(sentence)
-          
-          if (settings.voiceName) {
-            const voice = window.speechSynthesis.getVoices().find((v) => v.name === settings.voiceName)
-            if (voice) utterance.voice = voice
-          }
-          
-          utterance.rate = settings.speechRate
-          utterance.pitch = settings.speechPitch
-          utterance.volume = settings.speechVolume
-
-          utterance.onend = () => resolve()
-          utterance.onerror = () => resolve()
-
-          window.speechSynthesis.speak(utterance)
-        })
-      }
+      await playEdgeTTS(sentence)
 
       if (stoppedRef.current) return
       if (pausedRef.current) return
@@ -145,7 +130,7 @@ export function useSpeech(): UseSpeechReturn {
       currentIndexRef.current++
       speakNext()
     }
-  }, [settings.voiceName, settings.voiceLang, settings.speechRate, settings.speechPitch, settings.speechVolume, availableVoices])
+  }, [settings.voiceName, settings.speechRate, settings.speechPitch, settings.speechVolume])
 
   const speak = useCallback(async (text: string, startIndex: number = 0) => {
     stop()
@@ -176,37 +161,7 @@ export function useSpeech(): UseSpeechReturn {
     setCurrentSentence(sentence)
 
     try {
-      if (isCapacitorNative) {
-        const voiceIndex = settings.voiceName
-          ? availableVoices.findIndex((v) => v.name === settings.voiceName)
-          : -1
-        await TextToSpeech.speak({
-          text: sentence,
-          lang: settings.voiceLang || 'zh-CN',
-          rate: settings.speechRate,
-          pitch: settings.speechPitch,
-          volume: settings.speechVolume,
-          ...(voiceIndex >= 0 ? { voice: voiceIndex } : {}),
-        })
-      } else {
-        await new Promise<void>((resolve) => {
-          const utterance = new SpeechSynthesisUtterance(sentence)
-          
-          if (settings.voiceName) {
-            const voice = window.speechSynthesis.getVoices().find((v) => v.name === settings.voiceName)
-            if (voice) utterance.voice = voice
-          }
-          
-          utterance.rate = settings.speechRate
-          utterance.pitch = settings.speechPitch
-          utterance.volume = settings.speechVolume
-
-          utterance.onend = () => resolve()
-          utterance.onerror = () => resolve()
-
-          window.speechSynthesis.speak(utterance)
-        })
-      }
+      await playEdgeTTS(sentence)
     } catch (e) {
       console.error('语音播放错误', e)
     } finally {
@@ -215,23 +170,23 @@ export function useSpeech(): UseSpeechReturn {
         speakingRef.current = false
       }
     }
-  }, [settings.voiceName, settings.voiceLang, settings.speechRate, settings.speechPitch, settings.speechVolume, availableVoices])
+  }, [settings.voiceName, settings.speechRate, settings.speechPitch, settings.speechVolume])
 
   const pause = useCallback(() => {
     pausedRef.current = true
     setIsPaused(true)
-    if (!isCapacitorNative) {
-      window.speechSynthesis.pause()
+    if (audioRef.current) {
+      audioRef.current.pause()
     }
   }, [])
 
   const resume = useCallback(() => {
     pausedRef.current = false
     setIsPaused(false)
-    if (isCapacitorNative) {
-      speakNext()
+    if (audioRef.current && audioRef.current.src) {
+      audioRef.current.play().catch(() => speakNext())
     } else {
-      window.speechSynthesis.resume()
+      speakNext()
     }
   }, [speakNext])
 
@@ -245,10 +200,9 @@ export function useSpeech(): UseSpeechReturn {
     setCurrentSentenceIndex(0)
     currentIndexRef.current = 0
 
-    if (isCapacitorNative) {
-      TextToSpeech.stop().catch(() => {})
-    } else {
-      window.speechSynthesis.cancel()
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.src = ''
     }
   }, [])
 
@@ -257,7 +211,7 @@ export function useSpeech(): UseSpeechReturn {
     isPaused,
     currentSentence,
     currentSentenceIndex,
-    availableVoices,
+    availableVoices: EDGE_VOICES,
     speak,
     pause,
     resume,
