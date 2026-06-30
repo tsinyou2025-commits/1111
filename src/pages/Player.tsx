@@ -39,6 +39,7 @@ export default function Player() {
   const [showTimerMenu, setShowTimerMenu] = useState(false)
   const [showVolumeMenu, setShowVolumeMenu] = useState(false)
   const [showChapters, setShowChapters] = useState(false)
+  const [viewingChapterIndex, setViewingChapterIndex] = useState(currentStory.currentChapterIndex)
   const [timerMinutes, setTimerMinutes] = useState(0)
   const [timerRemaining, setTimerRemaining] = useState(0)
   const [localVolume, setLocalVolume] = useState(settings.speechVolume)
@@ -49,13 +50,21 @@ export default function Player() {
   const speakingChapterRef = useRef<number>(-1)
   const scrollLockRef = useRef(false)
 
-  const currentChapter = currentStory.chapters[currentStory.currentChapterIndex]
+  const playingChapter = currentStory.chapters[currentStory.currentChapterIndex]
+  const viewingChapter = currentStory.chapters[viewingChapterIndex]
   const completedChapters = currentStory.chapters.filter((c) => c.status === 'completed').length
 
   // 拆分句子用于高亮
-  const sentences = currentChapter?.content
-    ? currentChapter.content.match(/[^。！？.!?]+[。！？.!?]+/g) || [currentChapter.content]
+  const sentences = viewingChapter?.content
+    ? viewingChapter.content.match(/[^。！？.!?]+[。！？.!?]+/g) || [viewingChapter.content]
     : []
+
+  // 当后台播放章节自动切换时，如果用户没有在浏览其他章节，则自动跟随
+  useEffect(() => {
+    if (autoGeneratingRef.current) {
+       setViewingChapterIndex(currentStory.currentChapterIndex)
+    }
+  }, [currentStory.currentChapterIndex])
 
   useEffect(() => {
     if (!currentStory.theme || !currentStory.id) {
@@ -86,23 +95,23 @@ export default function Player() {
 
   // 当前章节生成完成且在播放状态 → 开始播放
   useEffect(() => {
-    if (!currentChapter) return
-    if (currentChapter.status !== 'completed') return
-    if (!currentChapter.content) return
+    if (!playingChapter) return
+    if (playingChapter.status !== 'completed') return
+    if (!playingChapter.content) return
     if (isSpeaking || isPaused) return
     if (speakingChapterRef.current === currentStory.currentChapterIndex) return
 
     if (currentStory.isPlaying) {
-      speak(currentChapter.content)
+      speak(playingChapter.content)
       speakingChapterRef.current = currentStory.currentChapterIndex
     }
-  }, [currentChapter?.status, currentChapter?.content, currentStory.currentChapterIndex, currentStory.isPlaying, isSpeaking, isPaused, speak])
+  }, [playingChapter?.status, playingChapter?.content, currentStory.currentChapterIndex, currentStory.isPlaying, isSpeaking, isPaused, speak])
 
   // 当前章播放结束 → 自动跳下一章
   useEffect(() => {
     if (isSpeaking || isPaused) return
     if (!currentStory.isPlaying) return
-    if (!currentChapter || currentChapter.status !== 'completed') return
+    if (!playingChapter || playingChapter.status !== 'completed') return
     if (speakingChapterRef.current !== currentStory.currentChapterIndex) return
     if (autoGeneratingRef.current) return
 
@@ -125,7 +134,7 @@ export default function Player() {
     } else {
       autoGeneratingRef.current = false
     }
-  }, [isSpeaking, isPaused, currentStory.isPlaying, currentStory.currentChapterIndex, currentStory.chapters.length, currentChapter?.status, generateChapter, setCurrentStory])
+  }, [isSpeaking, isPaused, currentStory.isPlaying, currentStory.currentChapterIndex, currentStory.chapters.length, playingChapter?.status, generateChapter, setCurrentStory])
 
   // 滚动到当前句子（生成中不滚动，避免鬼畜）
   useEffect(() => {
@@ -197,12 +206,12 @@ export default function Player() {
     } else if (isPaused) {
       resume()
       setCurrentStory({ isPlaying: true })
-    } else if (currentChapter?.status === 'completed' && currentChapter.content) {
-      speak(currentChapter.content)
+    } else if (playingChapter?.status === 'completed' && playingChapter.content) {
+      speak(playingChapter.content)
       speakingChapterRef.current = currentStory.currentChapterIndex
       setCurrentStory({ isPlaying: true })
     }
-  }, [isSpeaking, isPaused, currentChapter, currentStory.currentChapterIndex, speak, pause, resume, setCurrentStory])
+  }, [isSpeaking, isPaused, playingChapter, currentStory.currentChapterIndex, speak, pause, resume, setCurrentStory])
 
   const handlePrevChapter = () => {
     if (currentStory.currentChapterIndex > 0) {
@@ -211,6 +220,7 @@ export default function Player() {
       if (prevChapter?.status === 'completed') {
         stop()
         setCurrentStory({ currentChapterIndex: prevIdx, isPlaying: true })
+        setViewingChapterIndex(prevIdx)
         speakingChapterRef.current = prevIdx
         setTimeout(() => {
           speak(prevChapter.content)
@@ -226,39 +236,44 @@ export default function Player() {
       if (nextChapter.status === 'completed') {
         stop()
         setCurrentStory({ currentChapterIndex: nextIdx, isPlaying: true })
+        setViewingChapterIndex(nextIdx)
         speakingChapterRef.current = nextIdx
         setTimeout(() => {
           speak(nextChapter.content)
         }, 100)
       } else if (nextChapter.status === 'pending') {
         setCurrentStory({ currentChapterIndex: nextIdx, isPlaying: true })
+        setViewingChapterIndex(nextIdx)
         generateChapter(nextIdx)
       }
     }
   }
 
   const handleJumpToChapter = (index: number) => {
-    const chapter = currentStory.chapters[index]
-    if (!chapter) return
-
+    setViewingChapterIndex(index)
     setShowChapters(false)
+  }
+
+  const handleRetryChapter = () => {
+    if (viewingChapter) {
+      generateChapter(viewingChapterIndex)
+    }
+  }
+
+  const playViewingChapter = () => {
+    const chapter = currentStory.chapters[viewingChapterIndex]
+    if (!chapter) return
 
     if (chapter.status === 'completed') {
       stop()
-      setCurrentStory({ currentChapterIndex: index, isPlaying: true })
-      speakingChapterRef.current = index
+      setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true })
+      speakingChapterRef.current = viewingChapterIndex
       setTimeout(() => {
         speak(chapter.content)
       }, 100)
     } else if (chapter.status === 'pending') {
-      setCurrentStory({ currentChapterIndex: index, isPlaying: true })
-      generateChapter(index)
-    }
-  }
-
-  const handleRetryChapter = () => {
-    if (currentChapter) {
-      generateChapter(currentStory.currentChapterIndex)
+      setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true })
+      generateChapter(viewingChapterIndex)
     }
   }
 
@@ -390,14 +405,25 @@ export default function Player() {
                 </div>
               )}
 
-              {!isGeneratingOutline && currentChapter && (
+              {!isGeneratingOutline && viewingChapter && (
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-amber-300/80 text-center">
-                    {currentChapter.title}
-                  </h3>
-                  {currentChapter.summary && (
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <h3 className="text-lg font-medium text-amber-300/80 text-center">
+                      {viewingChapter.title}
+                    </h3>
+                    {viewingChapterIndex !== currentStory.currentChapterIndex && (
+                      <button
+                        onClick={playViewingChapter}
+                        className="px-4 py-1.5 rounded-full bg-amber-500/20 text-amber-300 text-sm hover:bg-amber-500/30 transition-colors inline-flex items-center gap-2"
+                      >
+                        <Play size={14} fill="currentColor" />
+                        从本章开始播放
+                      </button>
+                    )}
+                  </div>
+                  {viewingChapter.summary && (
                     <p className="text-sm text-slate-500 text-center italic">
-                      {currentChapter.summary}
+                      {viewingChapter.summary}
                     </p>
                   )}
                   <div className={cn(
@@ -405,14 +431,14 @@ export default function Player() {
                     settings.fontSize === 'small' && 'text-base',
                     settings.fontSize === 'large' && 'text-2xl'
                   )} style={{ textIndent: '2em' }}>
-                    {currentChapter.content ? (
+                    {viewingChapter.content ? (
                       sentences.map((s, idx) => (
                         <span
                           key={idx}
-                          data-sentence-active={isSpeaking && s === currentSentence}
+                          data-sentence-active={viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence}
                           className={cn(
                             'transition-colors duration-300',
-                            isSpeaking && s === currentSentence
+                            viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence
                               ? 'text-amber-300 bg-amber-500/10 rounded px-1'
                               : ''
                           )}
@@ -421,10 +447,10 @@ export default function Player() {
                         </span>
                       ))
                     ) : (
-                      currentChapter.status === 'generating' ? (
+                      viewingChapter.status === 'generating' ? (
                         <span className="text-slate-500">正在生成中，请稍候...</span>
                       ) : (
-                        <span className="text-slate-600">点击播放开始生成</span>
+                        <span className="text-slate-600">点击【从本章开始播放】开始生成</span>
                       )
                     )}
                   </div>
@@ -528,7 +554,7 @@ export default function Player() {
 
               <button
                 onClick={handlePlayPause}
-                disabled={currentChapter?.status !== 'completed' || !currentChapter?.content}
+                disabled={playingChapter?.status !== 'completed' || !playingChapter?.content}
                 className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-900 flex items-center justify-center shadow-xl shadow-amber-500/30 hover:shadow-amber-500/40 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
                 {isGenerating ? (
