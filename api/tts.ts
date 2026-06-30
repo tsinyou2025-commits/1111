@@ -2,6 +2,14 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end()
+  }
+
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed')
 
   const { text, voice = 'zh-CN-YunxiNeural', rate = 1, pitch = 1, volume = 1 } = req.body

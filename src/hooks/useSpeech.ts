@@ -112,8 +112,9 @@ export function useSpeech(): UseSpeechReturn {
         }
         
         await audio.play()
-      } catch (e) {
+      } catch (e: any) {
         console.error('TTS Fetch Error', e)
+        alert('播放失败: ' + e.message)
         resolve()
       }
     })
