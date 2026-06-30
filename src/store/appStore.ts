@@ -82,7 +82,7 @@ export const useAppStore = create<AppState>()(
         id: null,
         title: '',
         theme: '',
-        style: 'nature',
+        style: 'documentary',
         customStylePrompt: '',
         targetHours: 4,
         chapters: [],
@@ -119,14 +119,18 @@ export const useAppStore = create<AppState>()(
           },
         })),
       updateChapter: (index, updates) =>
-        set((state) => ({
-          currentStory: {
-            ...state.currentStory,
-            chapters: state.currentStory.chapters.map((ch, i) =>
-              i === index ? { ...ch, ...updates } : ch
-            ),
-          },
-        })),
+        set((state) => {
+          const newChapters = state.currentStory.chapters.map((ch, i) =>
+            i === index ? { ...ch, ...updates } : ch
+          )
+          return {
+            currentStory: {
+              ...state.currentStory,
+              chapters: newChapters,
+              totalWords: newChapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0),
+            },
+          }
+        }),
       addToHistory: (story) =>
         set((state) => {
           const existing = state.history.find((h) => h.id === story.id)

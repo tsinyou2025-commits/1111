@@ -200,7 +200,7 @@ export default function Player() {
         totalWords: currentStory.totalWords,
       })
     }
-  }, [currentStory.chapters.length, currentStory.totalWords])
+  }, [currentStory.id, currentStory.chapters.length, completedChapters])
 
   const handlePlayPause = useCallback(() => {
     if (isSpeaking && !isPaused) {

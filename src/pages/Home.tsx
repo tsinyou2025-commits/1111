@@ -61,7 +61,7 @@ export default function Home() {
   const { settings, setCurrentStory, currentStory } = useAppStore()
   const { generateOutline, isGeneratingOutline, error } = useStoryGenerator()
   const [theme, setTheme] = useState(currentStory.theme || '')
-  const [style, setStyle] = useState(currentStory.style || 'arthistory')
+  const [style, setStyle] = useState(currentStory.style || 'documentary')
   const [customStylePrompt, setCustomStylePrompt] = useState('')
   const [targetHours, setTargetHours] = useState(currentStory.targetHours || 4)
   const [customStyles, setCustomStyles] = useState<CustomStyle[]>([])
