@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Settings as SettingsIcon, Key, Globe, Mic, Palette, Volume2, Gauge, Check, AlertCircle, Sparkles, Download, RefreshCw, CheckCircle, XCircle, ExternalLink } from 'lucide-react'
+import { Settings as SettingsIcon, Key, Globe, Mic, Palette, Volume2, Gauge, Check, AlertCircle, Sparkles, Download, RefreshCw, CheckCircle, XCircle } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useSpeech } from '@/hooks/useSpeech'
 import { cn } from '@/lib/utils'
-import { getApiUrl, isElectron, isCapacitor } from '@/utils/apiBase'
-import { App as CapacitorApp } from '@capacitor/app'
-import { Browser } from '@capacitor/browser'
+import { getApiUrl, isElectron } from '@/utils/apiBase'
 
 interface ProviderConfig {
   id: string
@@ -128,31 +126,27 @@ export default function Settings() {
   }, [])
 
   useEffect(() => {
-    if (isElectron) {
-      const api = (window as any).electronAPI
-      api.getAppVersion().then((v: string) => setAppVersion(v))
+    if (!isElectron) return
 
-      api.onUpdateAvailable((info: any) => {
-        setUpdateStatus('available')
-        setUpdateInfo(info)
-      })
-      api.onUpdateNotAvailable(() => {
-        setUpdateStatus('not-available')
-      })
-      api.onDownloadProgress((progress: any) => {
-        setDownloadProgress(progress.percent || 0)
-      })
-      api.onUpdateDownloaded(() => {
-        setUpdateStatus('downloaded')
-      })
-      api.onUpdateError(() => {
-        setUpdateStatus('error')
-      })
-    } else if (isCapacitor) {
-      CapacitorApp.getInfo().then((info) => {
-        setAppVersion(info.version)
-      })
-    }
+    const api = (window as any).electronAPI
+    api.getAppVersion().then((v: string) => setAppVersion(v))
+
+    api.onUpdateAvailable((info: any) => {
+      setUpdateStatus('available')
+      setUpdateInfo(info)
+    })
+    api.onUpdateNotAvailable(() => {
+      setUpdateStatus('not-available')
+    })
+    api.onDownloadProgress((progress: any) => {
+      setDownloadProgress(progress.percent || 0)
+    })
+    api.onUpdateDownloaded(() => {
+      setUpdateStatus('downloaded')
+    })
+    api.onUpdateError(() => {
+      setUpdateStatus('error')
+    })
   }, [])
 
   const handleSave = () => {
@@ -162,60 +156,21 @@ export default function Settings() {
   }
 
   const handleCheckUpdate = async () => {
-    if (isElectron) {
-      setUpdateStatus('checking')
-      setDownloadProgress(0)
-      await (window as any).electronAPI.checkUpdate()
-    } else if (isCapacitor) {
-      setUpdateStatus('checking')
-      try {
-        const res = await fetch('https://api.github.com/repos/tsinyou2025-commits/1111/releases/latest')
-        const data = await res.json()
-        if (data.tag_name) {
-          const latestVersion = data.tag_name.replace(/^v/, '')
-          const currentVersion = appVersion
-          if (compareVersions(latestVersion, currentVersion) > 0) {
-            setUpdateStatus('available')
-            setUpdateInfo({
-              version: latestVersion,
-              url: data.html_url,
-              apkUrl: data.assets?.find((a: any) => a.name.endsWith('.apk'))?.browser_download_url,
-            })
-          } else {
-            setUpdateStatus('not-available')
-          }
-        }
-      } catch (e) {
-        setUpdateStatus('error')
-      }
-    }
+    if (!isElectron) return
+    setUpdateStatus('checking')
+    setDownloadProgress(0)
+    await (window as any).electronAPI.checkUpdate()
   }
 
   const handleDownloadUpdate = async () => {
-    if (isElectron) {
-      setUpdateStatus('downloading')
-      await (window as any).electronAPI.downloadUpdate()
-    } else if (isCapacitor && updateInfo?.url) {
-      await Browser.open({ url: updateInfo.apkUrl || updateInfo.url })
-    }
+    if (!isElectron) return
+    setUpdateStatus('downloading')
+    await (window as any).electronAPI.downloadUpdate()
   }
 
   const handleInstallUpdate = async () => {
-    if (isElectron) {
-      await (window as any).electronAPI.installUpdate()
-    }
-  }
-
-  function compareVersions(a: string, b: string): number {
-    const partsA = a.split('.').map(Number)
-    const partsB = b.split('.').map(Number)
-    for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-      const numA = partsA[i] || 0
-      const numB = partsB[i] || 0
-      if (numA > numB) return 1
-      if (numA < numB) return -1
-    }
-    return 0
+    if (!isElectron) return
+    await (window as any).electronAPI.installUpdate()
   }
 
   const handleTestVoice = () => {
@@ -536,8 +491,8 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* 版本更新 - Electron 或 Capacitor 环境显示 */}
-        {(isElectron || isCapacitor) && (
+        {/* 版本更新 - 仅 Electron 环境显示 */}
+        {isElectron && (
           <div className="bg-slate-800/30 rounded-2xl border border-slate-700/50 p-6 mb-6">
             <div className="flex items-center gap-3 mb-6">
               <RefreshCw size={20} className="text-amber-400" />
@@ -593,22 +548,13 @@ export default function Settings() {
                     onClick={handleDownloadUpdate}
                     className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-900 font-medium shadow-lg shadow-amber-500/20 hover:shadow-amber-500/30 transition-all flex items-center justify-center gap-2"
                   >
-                    {isCapacitor ? (
-                      <>
-                        <ExternalLink size={16} />
-                        前往下载更新
-                      </>
-                    ) : (
-                      <>
-                        <Download size={16} />
-                        下载更新
-                      </>
-                    )}
+                    <Download size={16} />
+                    下载更新
                   </button>
                 </div>
               )}
 
-              {updateStatus === 'downloading' && !isCapacitor && (
+              {updateStatus === 'downloading' && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-400">正在下载...</span>
@@ -623,7 +569,7 @@ export default function Settings() {
                 </div>
               )}
 
-              {updateStatus === 'downloaded' && !isCapacitor && (
+              {updateStatus === 'downloaded' && (
                 <div className="space-y-3">
                   <div className="py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center">
                     <div className="flex items-center justify-center gap-2 text-emerald-400">
