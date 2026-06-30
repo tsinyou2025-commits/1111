@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   Play,
   Pause,
@@ -12,6 +12,7 @@ import {
   Loader2,
   Home,
   List,
+  LocateFixed,
   CheckCircle2,
   Circle,
   RefreshCw,
@@ -300,6 +301,43 @@ export default function Player() {
     }
   }
 
+  const isVisible = location.pathname === '/player'
+  if (!isVisible) {
+    if (!currentStory.id || !playingChapter) return null
+    return (
+      <div className="fixed bottom-[80px] left-4 right-4 md:bottom-8 md:left-auto md:right-8 md:w-96 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-4 shadow-2xl z-50 flex items-center gap-4">
+        <div 
+          className="flex-1 min-w-0 cursor-pointer"
+          onClick={() => navigate('/player')}
+        >
+          <div className="text-xs text-amber-400 mb-1 font-medium flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+            后台播放中
+          </div>
+          <div className="text-sm text-slate-200 font-medium truncate">
+            {playingChapter.title}
+          </div>
+          <div className="text-xs text-slate-500 truncate mt-0.5">
+            {currentStory.title || currentStory.theme}
+          </div>
+        </div>
+        <button
+          onClick={handlePlayPause}
+          disabled={playingChapter?.status !== 'completed' || !playingChapter?.content}
+          className="w-12 h-12 flex-shrink-0 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-900 flex items-center justify-center shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+        >
+          {isGenerating ? (
+            <Loader2 size={20} className="animate-spin" />
+          ) : isSpeaking && !isPaused ? (
+            <Pause size={20} fill="currentColor" />
+          ) : (
+            <Play size={20} fill="currentColor" className="ml-0.5" />
+          )}
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* 顶部栏 */}
@@ -392,6 +430,24 @@ export default function Player() {
         {/* 文本区域 */}
         <div className="flex-1 relative overflow-hidden">
           <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-slate-950/80 via-transparent to-slate-950/80 z-10" />
+          
+          {(viewingChapterIndex !== currentStory.currentChapterIndex) && (
+            <button
+              onClick={() => {
+                setViewingChapterIndex(currentStory.currentChapterIndex)
+                setTimeout(() => {
+                  const el = document.querySelector('[data-sentence-active="true"]')
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  }
+                }, 100)
+              }}
+              className="absolute bottom-8 right-8 z-20 flex items-center gap-2 px-4 py-2 bg-amber-500 text-slate-900 rounded-full shadow-lg shadow-amber-500/20 hover:scale-105 active:scale-95 transition-all font-medium text-sm"
+            >
+              <LocateFixed size={16} />
+              定位到播放位置
+            </button>
+          )}
           
           <div
             ref={textContainerRef}
