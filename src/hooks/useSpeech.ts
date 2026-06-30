@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '@/store/appStore'
+import { getApiUrl } from '@/utils/apiBase'
 
 interface VoiceInfo {
   name: string
@@ -78,7 +79,7 @@ export function useSpeech(): UseSpeechReturn {
   const playEdgeTTS = async (text: string): Promise<void> => {
     return new Promise(async (resolve, reject) => {
       try {
-        const response = await fetch('/api/tts', {
+        const response = await fetch(getApiUrl('/api/tts'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -172,9 +173,6 @@ export function useSpeech(): UseSpeechReturn {
   const speakSentence = useCallback(async (sentence: string) => {
     stop()
 
-    stoppedRef.current = false
-    pausedRef.current = false
-    speakingRef.current = true
     setIsSpeaking(true)
     setIsPaused(false)
     setCurrentSentence(sentence)
