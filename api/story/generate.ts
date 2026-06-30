@@ -1,52 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-const stylePrompts: Record<string, string> = {
-  fantasy: '奇幻冒险风格，充满魔法、神秘生物和壮丽的异世界景观',
-  knowledge: '知识科普风格，用生动有趣的方式讲解各种知识，细节丰富，引人入胜',
-  history: '历史叙事风格，以细腻的笔触描绘历史场景、人物和事件',
-  nature: '自然风景风格，用舒缓的语言描绘大自然的美丽与宁静',
-  meditation: '冥想引导风格，温柔舒缓，引导听者放松身心，进入平静的状态',
-  arthistory: '艺术史风格，以建筑、空间设计、结构美学为线索，融合艺术史与历史关联性，充满神秘色彩。叙事简洁克制，以名词为核心，遇到重要术语、典故、象征符号时立即解释其来源与含义，或在段落结束后集中解释。大量引入历史人物，并配以简短生动的人物小传（生卒年、身份、性格、轶事、与主题的关联）。注重描述建筑的布局、空间感、材质、光影变化、装饰细节，以及艺术品背后的历史背景、文化象征和神秘传说。语调沉静而富有洞察力，如同一盏幽暗画廊里的解说声。',
-}
-
-function buildChapterPrompt(body: any): string {
-  const styleDesc = body.customStylePrompt || stylePrompts[body.style] || '叙事风格'
-  const wordsPerChapter = Math.floor((body.targetHours * 60 * 200) / Math.max(1, body.totalChapters))
-
-  let prompt = `请用${styleDesc}，创作一个关于"${body.theme}"的长篇故事的第 ${body.chapterIndex + 1} 章${body.chapterTitle ? `——《${body.chapterTitle}》` : ''}。
-
-本章是全书中的第 ${body.chapterIndex + 1} / ${body.totalChapters} 章。
-
-要求：
-1. 本章大约 ${wordsPerChapter} 字左右，内容要充实，细节丰富
-2. 语言要舒缓、柔和，适合睡前聆听，避免过于激烈或刺激的情节
-3. 描写要细腻，注重环境、氛围和感官细节的刻画
-4. 叙事节奏要慢，让听者能够沉浸其中
-5. 不要在章节结尾留下过于紧张的悬念，保持平和的基调
-6. 直接输出故事内容，不要有任何额外的说明或标题`
-
-  if (body.previousSummary) {
-    prompt += `\n\n之前章节的概要：${body.previousSummary}`
-  }
-  if (body.previousEnding) {
-    prompt += `\n\n上一章的结尾是：${body.previousEnding}`
-  }
-  if (body.chapterIndex === 0) {
-    prompt += `\n\n这是故事的第一章，请为故事设定一个引人入胜的开端。`
-  } else if (body.chapterIndex === body.totalChapters - 1) {
-    prompt += `\n\n这是故事的最后一章，请给故事一个平和、圆满的收尾。`
-  } else {
-    prompt += `\n\n请承接上文，自然地继续故事。`
-  }
-
-  return prompt
-}
-
-function buildSummaryPrompt(chapterContent: string, theme: string): string {
-  return `请用200字以内总结下面这段关于"${theme}"的故事章节的主要内容，以便后续章节参考。直接输出总结，不要有任何额外说明：
-
-${chapterContent.slice(-2000)}`
-}
+import { buildChapterPrompt, buildSummaryPrompt } from '../../shared/storyLogic'
 
 async function generateChapterStream(
   body: any,
@@ -74,7 +28,7 @@ async function generateChapterStream(
       body: JSON.stringify({
         model: body.model,
         messages: [
-          { role: 'system', content: '你是一位擅长创作舒缓睡前故事的作家，你的文字细腻优美，节奏舒缓，能够帮助听众放松身心，进入梦乡。' },
+          { role: 'system', content: '你是一位专业的内容创作者，能够极其精准地模仿用户指定的文体、语气和结构进行创作。你绝不输出任何废话、客套话或多余的解释，总是严格遵守用户的格式要求。' },
           { role: 'user', content: prompt }
         ],
         stream: true,
