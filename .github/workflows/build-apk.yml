@@ -18,6 +18,10 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Get version from package.json
+        id: version
+        run: echo "VERSION=$(cat package.json | grep '"version"' | head -1 | awk -F: '{ print $2 }' | sed 's/[",]//g' | tr -d ' ')" >> $GITHUB_OUTPUT
+
       - name: Install dependencies
         run: npm install
 
@@ -43,9 +47,21 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../长夜故事-v${{ steps.version.outputs.VERSION }}.apk
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: 长夜故事-v${{ steps.version.outputs.VERSION }}.apk
+
+      - name: Release to GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: v${{ steps.version.outputs.VERSION }}
+          files: 长夜故事-v${{ steps.version.outputs.VERSION }}.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

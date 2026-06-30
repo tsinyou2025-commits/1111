@@ -1,5 +1,23 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getModels } from '../../shared/storyLogic'
+
+async function getModels(baseUrl: string, apiKey: string): Promise<any> {
+  if (!baseUrl || !apiKey) {
+    throw new Error('缺少必要参数')
+  }
+
+  const cleanBaseUrl = baseUrl.replace(/\/$/, '')
+  const response = await fetch(`${cleanBaseUrl}/models`, {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error('获取模型列表失败')
+  }
+
+  return await response.json()
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
