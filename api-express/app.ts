@@ -12,6 +12,7 @@ import path from 'path'
 import dotenv from 'dotenv'
 import authRoutes from './routes/auth.js'
 import storyRoutes from './routes/story.js'
+import ttsRoutes from './routes/tts.js'
 
 // load env
 dotenv.config()
@@ -27,6 +28,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }))
  */
 app.use('/api/auth', authRoutes)
 app.use('/api/story', storyRoutes)
+app.use('/api/tts', ttsRoutes)
 
 /**
  * health
