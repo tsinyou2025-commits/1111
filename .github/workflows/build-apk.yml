@@ -33,7 +33,7 @@ jobs:
       - name: Decode keystore
         run: |
           if [ -n "$ANDROID_RELEASE_KEYSTORE" ]; then
-            echo "$ANDROID_RELEASE_KEYSTORE" | base64 -di > android/app/release.keystore
+            echo "$ANDROID_RELEASE_KEYSTORE" | base64 --decode --ignore-garbage > android/app/release.keystore
             echo "Keystore decoded"
           else
             echo "No keystore provided"
