@@ -49,6 +49,7 @@ export default function Player() {
   const startedStoryIdRef = useRef<string | null>(null)
   const autoGeneratingRef = useRef(false)
   const speakingChapterRef = useRef<number>(-1)
+  const justStartedSpeakingRef = useRef(false)
   const scrollLockRef = useRef(false)
 
   const playingChapter = currentStory.chapters[currentStory.currentChapterIndex]
@@ -90,6 +91,7 @@ export default function Player() {
       generateChapter(0)
     } else if (firstChapter?.status === 'completed' && firstChapter.content) {
       // 历史记录里的故事，直接开始播放
+      justStartedSpeakingRef.current = true
       speak(firstChapter.content)
       setCurrentStory({ isPlaying: true })
       speakingChapterRef.current = 0
@@ -105,6 +107,7 @@ export default function Player() {
     if (speakingChapterRef.current === currentStory.currentChapterIndex) return
 
     if (currentStory.isPlaying) {
+      justStartedSpeakingRef.current = true
       speak(playingChapter.content)
       speakingChapterRef.current = currentStory.currentChapterIndex
     }
@@ -112,6 +115,7 @@ export default function Player() {
 
   // 当前章播放结束 → 自动跳下一章
   useEffect(() => {
+    if (justStartedSpeakingRef.current) return
     if (isSpeaking || isPaused) return
     if (!currentStory.isPlaying) return
     if (!playingChapter || playingChapter.status !== 'completed') return
@@ -174,7 +178,12 @@ export default function Player() {
     }
   }, [currentStory.isPlaying, isGenerating, playingChapter?.status, currentStory.currentChapterIndex, generateChapter])
 
-
+  // 清理 justStartedSpeakingRef 标记
+  useEffect(() => {
+    if (isSpeaking) {
+      justStartedSpeakingRef.current = false
+    }
+  }, [isSpeaking])
 
   // 滚动到当前句子（生成中不滚动，避免鬼畜）
   useEffect(() => {
@@ -247,6 +256,7 @@ export default function Player() {
       resume()
       setCurrentStory({ isPlaying: true })
     } else if (playingChapter?.status === 'completed' && playingChapter.content) {
+      justStartedSpeakingRef.current = true
       speak(playingChapter.content)
       speakingChapterRef.current = currentStory.currentChapterIndex
       setCurrentStory({ isPlaying: true })
@@ -262,6 +272,7 @@ export default function Player() {
         setCurrentStory({ currentChapterIndex: prevIdx, isPlaying: true })
         setViewingChapterIndex(prevIdx)
         speakingChapterRef.current = prevIdx
+        justStartedSpeakingRef.current = true
         setTimeout(() => {
           speak(prevChapter.content)
         }, 100)
@@ -278,6 +289,7 @@ export default function Player() {
         setCurrentStory({ currentChapterIndex: nextIdx, isPlaying: true })
         setViewingChapterIndex(nextIdx)
         speakingChapterRef.current = nextIdx
+        justStartedSpeakingRef.current = true
         setTimeout(() => {
           speak(nextChapter.content)
         }, 100)
@@ -304,6 +316,7 @@ export default function Player() {
       stop()
       setCurrentStory({ currentChapterIndex: index, isPlaying: true })
       speakingChapterRef.current = index
+      justStartedSpeakingRef.current = true
       setTimeout(() => speak(chapter.content), 100)
     } else if (chapter.status === 'pending') {
       stop()
@@ -327,6 +340,7 @@ export default function Player() {
     if (chapter.status === 'completed') {
       setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true })
       speakingChapterRef.current = viewingChapterIndex
+      justStartedSpeakingRef.current = true
       setTimeout(() => {
         speak(chapter.content)
       }, 100)
@@ -555,6 +569,7 @@ export default function Player() {
                             stop()
                             setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true })
                             speakingChapterRef.current = viewingChapterIndex
+                            justStartedSpeakingRef.current = true
                             setTimeout(() => speak(viewingChapter.content, idx), 100)
                           }}
                           className={cn(
