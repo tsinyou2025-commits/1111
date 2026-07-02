@@ -12,8 +12,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -29,23 +28,20 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Get version from package.json
+      - name: Get version
         id: version
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        run: echo "VERSION=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
 
-      - name: Check and decode release keystore
-        id: keystore
+      - name: Decode keystore
         run: |
-          if [ -n "${{ secrets.ANDROID_RELEASE_KEYSTORE }}" ]; then
-            echo "${{ secrets.ANDROID_RELEASE_KEYSTORE }}" | base64 --decode > android/app/release.keystore
-            echo "HAS_KEYSTORE=true" >> $GITHUB_OUTPUT
-            echo "Release keystore decoded successfully"
+          if [ -n "$ANDROID_RELEASE_KEYSTORE" ]; then
+            echo "$ANDROID_RELEASE_KEYSTORE" | base64 -d > android/app/release.keystore
+            echo "Keystore decoded"
           else
-            echo "HAS_KEYSTORE=false" >> $GITHUB_OUTPUT
-            echo "No release keystore found, will build debug APK"
+            echo "No keystore provided"
           fi
+        env:
+          ANDROID_RELEASE_KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE }}
 
       - name: Install dependencies
         run: npm install
@@ -53,43 +49,40 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Capacitor sync Android
+      - name: Capacitor sync
         run: npx cap sync android
 
-      - name: Build Release APK
-        if: steps.keystore.outputs.HAS_KEYSTORE == 'true'
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          if [ -f app/release.keystore ]; then
+            echo "Building release APK..."
+            ./gradlew assembleRelease
+            cp app/build/outputs/apk/release/app-release.apk "../长夜故事-v$VERSION.apk"
+          else
+            echo "Building debug APK..."
+            ./gradlew assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk "../长夜故事-v$VERSION.apk"
+          fi
         env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
           RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk "../长夜故事-v${{ steps.version.outputs.VERSION }}.apk"
 
-      - name: Build Debug APK (fallback)
-        if: steps.keystore.outputs.HAS_KEYSTORE != 'true'
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk "../长夜故事-v${{ steps.version.outputs.VERSION }}.apk"
-
-      - name: Upload APK artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-apk
           path: 长夜故事-v${{ steps.version.outputs.VERSION }}.apk
 
-      - name: Release to GitHub
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.VERSION }}
           name: v${{ steps.version.outputs.VERSION }}
           files: 长夜故事-v${{ steps.version.outputs.VERSION }}.apk
-          draft: false
-          prerelease: false
           make_latest: true
           fail_on_unmatched_files: false
         env:
