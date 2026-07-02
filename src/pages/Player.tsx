@@ -147,6 +147,35 @@ export default function Player() {
     }
   }, [isSpeaking, isPaused, currentStory.isPlaying, currentStory.currentChapterIndex, currentStory.chapters.length, playingChapter?.status, generateChapter, setCurrentStory])
 
+  // 预生成下一章：当当前章正在播放且空闲时，提前在后台生成下一章
+  useEffect(() => {
+    if (!currentStory.isPlaying) return
+    if (isGenerating) return
+    if (!playingChapter || playingChapter.status !== 'completed') return
+
+    const nextIdx = currentStory.currentChapterIndex + 1
+    if (nextIdx < currentStory.chapters.length) {
+      const nextChapter = currentStory.chapters[nextIdx]
+      if (nextChapter.status === 'pending') {
+        generateChapter(nextIdx)
+      }
+    }
+  }, [currentStory.isPlaying, isGenerating, playingChapter?.status, currentStory.currentChapterIndex, currentStory.chapters.length, generateChapter])
+
+  // 兜底逻辑：如果当前需要播放的章节是 pending，且当前系统处于空闲，则必须生成它
+  // 这可以解决用户手动干预导致自动跳章未能成功触发生成的问题
+  useEffect(() => {
+    if (!currentStory.isPlaying) return
+    if (isGenerating) return
+    if (!playingChapter) return
+    
+    if (playingChapter.status === 'pending') {
+      generateChapter(currentStory.currentChapterIndex)
+    }
+  }, [currentStory.isPlaying, isGenerating, playingChapter?.status, currentStory.currentChapterIndex, generateChapter])
+
+
+
   // 滚动到当前句子（生成中不滚动，避免鬼畜）
   useEffect(() => {
     if (!currentSentence) return
