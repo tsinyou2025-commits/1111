@@ -62,10 +62,10 @@ export default function Player() {
 
   // 当后台播放章节自动切换时，如果用户没有在浏览其他章节，则自动跟随
   useEffect(() => {
-    if (autoGeneratingRef.current) {
+    if (autoGeneratingRef.current && viewingChapterIndex !== currentStory.currentChapterIndex) {
        setViewingChapterIndex(currentStory.currentChapterIndex)
     }
-  }, [currentStory.currentChapterIndex])
+  }, [currentStory.currentChapterIndex, viewingChapterIndex])
 
   useEffect(() => {
     if (!currentStory.theme || !currentStory.id) {
@@ -119,7 +119,10 @@ export default function Player() {
     if (autoGeneratingRef.current) return
 
     const nextIdx = currentStory.currentChapterIndex + 1
-    if (nextIdx >= currentStory.chapters.length) return
+    if (nextIdx >= currentStory.chapters.length) {
+      setCurrentStory({ isPlaying: false })
+      return
+    }
 
     const nextChapter = currentStory.chapters[nextIdx]
     if (!nextChapter) return
@@ -128,13 +131,18 @@ export default function Player() {
 
     if (nextChapter.status === 'completed') {
       setCurrentStory({ currentChapterIndex: nextIdx })
+      setViewingChapterIndex(nextIdx)
       autoGeneratingRef.current = false
     } else if (nextChapter.status === 'pending') {
       setCurrentStory({ currentChapterIndex: nextIdx })
+      setViewingChapterIndex(nextIdx)
       generateChapter(nextIdx).finally(() => {
         autoGeneratingRef.current = false
       })
     } else {
+      // 正在生成中，直接切换过去等待
+      setCurrentStory({ currentChapterIndex: nextIdx })
+      setViewingChapterIndex(nextIdx)
       autoGeneratingRef.current = false
     }
   }, [isSpeaking, isPaused, currentStory.isPlaying, currentStory.currentChapterIndex, currentStory.chapters.length, playingChapter?.status, generateChapter, setCurrentStory])

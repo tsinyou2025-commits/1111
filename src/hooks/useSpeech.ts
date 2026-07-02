@@ -34,6 +34,10 @@ function splitSentences(text: string): string[] {
   return sentences.filter((s) => s.trim().length > 0)
 }
 
+function cleanSentence(text: string): string {
+  return text.replace(/[*#_~`]/g, '')
+}
+
 export function useSpeech(): UseSpeechReturn {
   const { settings } = useAppStore()
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -47,6 +51,16 @@ export function useSpeech(): UseSpeechReturn {
   const pausedRef = useRef(false)
   const stoppedRef = useRef(true)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioCacheRef = useRef<Map<number, string>>(new Map())
+  const prefetchingRef = useRef<Set<number>>(new Set())
+
+  const clearAudioCache = useCallback(() => {
+    audioCacheRef.current.forEach(url => {
+      if (url) URL.revokeObjectURL(url)
+    })
+    audioCacheRef.current.clear()
+    prefetchingRef.current.clear()
+  }, [])
 
   useEffect(() => {
     // 移动端 Safari/Chrome 必须由用户手势触发一次播放，才能在后续异步操作中自动播放
@@ -73,18 +87,24 @@ export function useSpeech(): UseSpeechReturn {
         audioRef.current.src = ''
         audioRef.current = null
       }
+      clearAudioCache()
     }
-  }, [])
+  }, [clearAudioCache])
 
-  const playEdgeTTS = async (text: string, retries = 2): Promise<void> => {
+  const fetchTTS = async (text: string, retries = 2): Promise<string> => {
     return new Promise(async (resolve) => {
       const attempt = async (retriesLeft: number) => {
         try {
+          const cleanedText = cleanSentence(text)
+          if (!cleanedText.trim()) {
+            return resolve('')
+          }
+
           const response = await fetch(getApiUrl('/api/tts'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              text,
+              text: cleanedText,
               voice: settings.voiceName || 'zh-CN-YunxiNeural',
               rate: settings.speechRate,
               pitch: settings.speechPitch,
@@ -95,35 +115,14 @@ export function useSpeech(): UseSpeechReturn {
 
           const blob = await response.blob()
           const url = URL.createObjectURL(blob)
-
-          if (!audioRef.current) {
-            audioRef.current = new Audio()
-          }
-
-          const audio = audioRef.current
-          audio.src = url
-          audio.volume = settings.speechVolume
-
-          audio.onended = () => {
-            URL.revokeObjectURL(url)
-            resolve()
-          }
-          audio.onerror = () => {
-            URL.revokeObjectURL(url)
-            // 播放失败时静默跳过，不中断流程
-            resolve()
-          }
-
-          await audio.play()
+          resolve(url)
         } catch (e: any) {
           if (retriesLeft > 0) {
-            // 等待2秒后重试
             await new Promise(r => setTimeout(r, 2000))
             await attempt(retriesLeft - 1)
           } else {
-            // 重试全部失败后静默跳过本句，不 alert
             console.warn('[TTS] 跳过句子（重试耗尽）:', text.slice(0, 20))
-            resolve()
+            resolve('')
           }
         }
       }
@@ -131,23 +130,69 @@ export function useSpeech(): UseSpeechReturn {
     })
   }
 
+  const playAudio = async (url: string): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!url) {
+        return resolve()
+      }
+      if (!audioRef.current) {
+        audioRef.current = new Audio()
+      }
+
+      const audio = audioRef.current
+      audio.src = url
+      audio.volume = settings.speechVolume
+
+      audio.onended = () => resolve()
+      audio.onerror = () => resolve()
+
+      audio.play().catch(() => resolve())
+    })
+  }
+
   const speakNext = useCallback(async () => {
     if (stoppedRef.current) return
     if (pausedRef.current) return
 
-    if (currentIndexRef.current >= sentencesRef.current.length) {
+    const currentIndex = currentIndexRef.current
+    if (currentIndex >= sentencesRef.current.length) {
       setIsSpeaking(false)
       setIsPaused(false)
       speakingRef.current = false
       return
     }
 
-    const sentence = sentencesRef.current[currentIndexRef.current]
+    const sentence = sentencesRef.current[currentIndex]
     setCurrentSentence(sentence)
-    setCurrentSentenceIndex(currentIndexRef.current)
+    setCurrentSentenceIndex(currentIndex)
 
     try {
-      await playEdgeTTS(sentence)
+      let url = audioCacheRef.current.get(currentIndex)
+      if (url === undefined) {
+        url = await fetchTTS(sentence)
+        audioCacheRef.current.set(currentIndex, url)
+      }
+
+      // 预加载下一句
+      const nextIndex = currentIndex + 1
+      if (nextIndex < sentencesRef.current.length && !audioCacheRef.current.has(nextIndex) && !prefetchingRef.current.has(nextIndex)) {
+        prefetchingRef.current.add(nextIndex)
+        fetchTTS(sentencesRef.current[nextIndex]).then(nextUrl => {
+          audioCacheRef.current.set(nextIndex, nextUrl)
+          prefetchingRef.current.delete(nextIndex)
+        }).catch(() => {
+          prefetchingRef.current.delete(nextIndex)
+        })
+      }
+
+      if (stoppedRef.current) return
+      if (pausedRef.current) return
+
+      await playAudio(url)
+      
+      // 播放完成后清理当前 URL
+      if (url) URL.revokeObjectURL(url)
+      audioCacheRef.current.delete(currentIndex)
 
       if (stoppedRef.current) return
       if (pausedRef.current) return
@@ -188,7 +233,9 @@ export function useSpeech(): UseSpeechReturn {
     setCurrentSentence(sentence)
 
     try {
-      await playEdgeTTS(sentence)
+      const url = await fetchTTS(sentence)
+      await playAudio(url)
+      if (url) URL.revokeObjectURL(url)
     } catch (e) {
       console.error('语音播放错误', e)
     } finally {
@@ -231,7 +278,8 @@ export function useSpeech(): UseSpeechReturn {
       audioRef.current.pause()
       audioRef.current.src = ''
     }
-  }, [])
+    clearAudioCache()
+  }, [clearAudioCache])
 
   return {
     isSpeaking,
