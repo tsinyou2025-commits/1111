@@ -293,8 +293,9 @@ export default function Player() {
     const chapter = currentStory.chapters[viewingChapterIndex]
     if (!chapter) return
 
+    stop()
+
     if (chapter.status === 'completed') {
-      stop()
       setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true })
       speakingChapterRef.current = viewingChapterIndex
       setTimeout(() => {
@@ -539,9 +540,22 @@ export default function Player() {
                       ))
                     ) : (
                       viewingChapter.status === 'generating' ? (
-                        <span className="text-slate-500">正在生成中，请稍候...</span>
+                        <div className="text-center py-10">
+                          <Loader2 size={32} className="text-amber-500/50 animate-spin mx-auto mb-4" />
+                          <span className="text-slate-500">正在后台生成中，请稍候...</span>
+                        </div>
                       ) : (
-                        <span className="text-slate-600">点击【从本章开始播放】开始生成</span>
+                        <div className="flex flex-col items-center gap-4 py-12">
+                          <span className="text-slate-500">本章尚未生成</span>
+                          <button
+                            onClick={() => generateChapter(viewingChapterIndex)}
+                            className="px-6 py-2.5 rounded-full bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors inline-flex items-center gap-2 border border-slate-700/50"
+                          >
+                            <RefreshCw size={16} />
+                            提前生成本章 (不影响当前朗读)
+                          </button>
+                          <span className="text-xs text-slate-600 mt-2">提示：也可以直接点击顶部【从本章开始播放】</span>
+                        </div>
                       )
                     )}
                   </div>
