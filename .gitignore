@@ -18,7 +18,10 @@ release-server
 scripts
 
 # Capacitor 原生平台（自动生成）
-android
+android/app/build
+android/.gradle
+android/capacitor-cordova-android-plugins
+android/local.properties
 ios
 
 # Editor directories and files

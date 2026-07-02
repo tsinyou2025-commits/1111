@@ -35,6 +35,11 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Decode release keystore
+        if: ${{ secrets.ANDROID_RELEASE_KEYSTORE != '' }}
+        run: |
+          echo "${{ secrets.ANDROID_RELEASE_KEYSTORE }}" | base64 --decode > android/app/release.keystore
+
       - name: Install dependencies
         run: npm install
 
@@ -44,7 +49,21 @@ jobs:
       - name: Capacitor sync Android
         run: npx cap sync android
 
-      - name: Build APK
+      - name: Build Release APK
+        if: ${{ secrets.ANDROID_RELEASE_KEYSTORE != '' }}
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "../长夜故事-v${{ steps.version.outputs.VERSION }}.apk"
+
+      - name: Build Debug APK (fallback)
+        if: ${{ secrets.ANDROID_RELEASE_KEYSTORE == '' }}
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
         run: |
@@ -56,7 +75,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
+          name: app-apk
           path: 长夜故事-v${{ steps.version.outputs.VERSION }}.apk
 
       - name: Release to GitHub
