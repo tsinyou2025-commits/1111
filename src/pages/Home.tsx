@@ -171,9 +171,9 @@ export default function Home() {
             让 AI 为你创作专属的睡前故事，伴你安然入眠
           </p>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700/50 text-xs text-slate-500">
-            <span>v1.0.10</span>
+            <span>v1.0.11</span>
             <span className="w-1 h-1 rounded-full bg-slate-600" />
-            <span>热更新测试: 2026-07-03 05:40</span>
+            <span>热更新测试: 2026-07-03 05:52</span>
           </div>
         </div>
 

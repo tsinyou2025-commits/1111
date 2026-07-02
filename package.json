@@ -1,7 +1,7 @@
 {
   "name": "long-night-stories",
   "private": true,
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "长夜故事 - AI驱动的助眠故事生成器",
   "main": "electron/main.js",
   "type": "module",
