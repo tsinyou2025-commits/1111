@@ -29,7 +29,7 @@ const defaultStyleOptions = [
   { id: 'arthistory', name: '艺术史', desc: '建筑·人物·神秘学', icon: '🏛️' },
   { id: 'fantasy', name: '奇幻冒险', desc: '魔法与异世界之旅', icon: '✨' },
   { id: 'knowledge', name: '知识科普', desc: '生动有趣的知识讲解', icon: '📚' },
-  { id: 'history', name: '历史叙事', desc: '穿越时空的历史长卷', icon: '🏺' },
+  { id: 'history', name: '历史叙事', desc: '核心叙事·人物小传·分阶段论述', icon: '🏺' },
   { id: 'nature', name: '自然风景', desc: '舒缓宁静的大自然', icon: '🌿' },
   { id: 'meditation', name: '冥想引导', desc: '放松身心的冥想之旅', icon: '🧘' },
 ]
