@@ -57,6 +57,8 @@ function cleanSentence(text: string): string {
 
 export function useSpeech(): UseSpeechReturn {
   const { settings } = useAppStore()
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [currentSentence, setCurrentSentence] = useState('')
@@ -263,9 +265,9 @@ export function useSpeech(): UseSpeechReturn {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               text: cleanedText,
-              voice: settings.voiceName || 'zh-CN-YunxiNeural',
-              rate: settings.speechRate,
-              pitch: settings.speechPitch,
+              voice: settingsRef.current.voiceName || 'zh-CN-YunxiNeural',
+              rate: settingsRef.current.speechRate,
+              pitch: settingsRef.current.speechPitch,
             })
           })
 
@@ -299,7 +301,7 @@ export function useSpeech(): UseSpeechReturn {
 
       const audio = audioRef.current
       audio.src = url
-      audio.volume = settings.speechVolume
+      audio.volume = settingsRef.current.speechVolume
 
       audio.onended = () => resolve()
       audio.onerror = () => resolve()
@@ -363,7 +365,7 @@ export function useSpeech(): UseSpeechReturn {
       currentIndexRef.current++
       speakNextRef.current?.()
     }
-  }, [settings.voiceName, settings.speechRate, settings.speechPitch, settings.speechVolume])
+  }, [])
 
   // 把 speakNext 的最新引用挂到 ref，供 keepalive / visibility 回调使用
   speakNextRef.current = speakNext
@@ -425,7 +427,7 @@ export function useSpeech(): UseSpeechReturn {
         speakingRef.current = false
       }
     }
-  }, [settings.voiceName, settings.speechRate, settings.speechPitch, settings.speechVolume])
+  }, [])
 
   const pause = useCallback(() => {
     pausedRef.current = true

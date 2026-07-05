@@ -582,18 +582,46 @@ export default function Player() {
         <div className="flex-1 relative overflow-hidden">
           <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-slate-950/80 via-transparent to-slate-950/80 z-10" />
           
-          {(viewingChapterIndex !== currentStory.currentChapterIndex || scrolledAway) && isSpeaking && (
+          {/* 悬浮播放控制栏 */}
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-full px-2 py-1.5 shadow-2xl">
+            <button
+              onClick={handlePlayPause}
+              disabled={playingChapter?.status !== 'completed' || !playingChapter?.content}
+              className="w-10 h-10 rounded-full bg-amber-500 text-slate-900 flex items-center justify-center active:scale-95 transition-all disabled:opacity-50"
+            >
+              {isGenerating ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : isSpeaking && !isPaused ? (
+                <Pause size={18} fill="currentColor" />
+              ) : (
+                <Play size={18} fill="currentColor" className="ml-0.5" />
+              )}
+            </button>
             <button
               onClick={() => {
-                setViewingChapterIndex(currentStory.currentChapterIndex)
-                scrollToCurrentSentence()
+                const currentIdx = speedOptions.indexOf(settings.speechRate)
+                const nextIdx = (currentIdx + 1) % speedOptions.length
+                const newRate = speedOptions[nextIdx]
+                setLocalRate(newRate)
+                useAppStore.getState().setSettings({ speechRate: newRate })
               }}
-              className="absolute bottom-8 right-8 z-20 flex items-center gap-2 px-4 py-2 bg-amber-500 text-slate-900 rounded-full shadow-lg shadow-amber-500/20 hover:scale-105 active:scale-95 transition-all font-medium text-sm"
+              className="h-10 px-3 rounded-full bg-slate-700/80 text-slate-300 text-xs font-bold flex items-center justify-center active:scale-95 transition-all"
             >
-              <LocateFixed size={16} />
-              定位到播放位置
+              {settings.speechRate}x
             </button>
-          )}
+            {(viewingChapterIndex !== currentStory.currentChapterIndex || scrolledAway) && isSpeaking && (
+              <button
+                onClick={() => {
+                  setViewingChapterIndex(currentStory.currentChapterIndex)
+                  scrollToCurrentSentence()
+                }}
+                className="h-10 px-3 rounded-full bg-amber-500/20 text-amber-400 text-xs font-medium flex items-center gap-1 active:scale-95 transition-all"
+              >
+                <LocateFixed size={14} />
+                定位
+              </button>
+            )}
+          </div>
           
           <div
             ref={textContainerRef}
