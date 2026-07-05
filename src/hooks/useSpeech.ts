@@ -22,7 +22,7 @@ interface UseSpeechReturn {
   currentSentence: string
   currentSentenceIndex: number
   availableVoices: VoiceInfo[]
-  speak: (text: string, startIndex?: number) => void
+  speak: (text: string, startIndex?: number, meta?: { storyTitle?: string; chapterTitle?: string }) => void
   pause: () => void
   resume: () => void
   stop: () => void
@@ -53,6 +53,13 @@ export function useSpeech(): UseSpeechReturn {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioCacheRef = useRef<Map<number, string>>(new Map())
   const prefetchingRef = useRef<Set<number>>(new Set())
+  // === 后台保活相关 ===
+  const wakeLockRef = useRef<any>(null)
+  const keepaliveRef = useRef<number | null>(null)
+  const requestWakeLockRef = useRef<(() => Promise<void>) | null>(null)
+  const releaseWakeLockRef = useRef<(() => Promise<void>) | null>(null)
+  const chapterTitleRef = useRef<string>('')
+  const storyTitleRef = useRef<string>('')
 
   const clearAudioCache = useCallback(() => {
     audioCacheRef.current.forEach(url => {
@@ -61,6 +68,24 @@ export function useSpeech(): UseSpeechReturn {
     audioCacheRef.current.clear()
     prefetchingRef.current.clear()
   }, [])
+
+  // 用 ref 解开 speakNext 的循环依赖：checkPlaybackHealth 在 useEffect 中通过 ref 调用
+  const speakNextRef = useRef<(() => Promise<void>) | null>(null)
+
+  // 检测链条是否断裂：5 秒一次，如果「应该播放」但音频没在播，则重启
+  const checkPlaybackHealth = () => {
+    if (stoppedRef.current) return
+    if (pausedRef.current) return
+    if (!speakingRef.current) return
+    if (currentIndexRef.current >= sentencesRef.current.length) return
+
+    const audio = audioRef.current
+    // audio 元素存在但 paused=true 且 ended=true（idle 状态）→ onended 没触发，链条断了
+    if (!audio || audio.paused || audio.ended) {
+      console.warn('[Keepalive] 检测到播放链条断裂，强制恢复')
+      speakNextRef.current?.()
+    }
+  }
 
   useEffect(() => {
     // 移动端 Safari/Chrome 必须由用户手势触发一次播放，才能在后续异步操作中自动播放
@@ -71,7 +96,7 @@ export function useSpeech(): UseSpeechReturn {
       // 播放一段极短的静音 base64 mp3
       audioRef.current.src = 'data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq'
       audioRef.current.play().catch(() => {})
-      
+
       document.removeEventListener('touchstart', unlockAudio)
       document.removeEventListener('click', unlockAudio)
     }
@@ -79,17 +104,93 @@ export function useSpeech(): UseSpeechReturn {
     document.addEventListener('touchstart', unlockAudio, { once: true })
     document.addEventListener('click', unlockAudio, { once: true })
 
+    // === MediaSession 注册：让 Android 把本应用当成媒体会话，加入锁屏控制并降低后台回收概率 ===
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: chapterTitleRef.current || '长夜故事',
+          artist: storyTitleRef.current || 'AI 助眠',
+          album: '长夜故事',
+        })
+        navigator.mediaSession.setActionHandler('play', () => {
+          pausedRef.current = false
+          setIsPaused(false)
+          if (audioRef.current && audioRef.current.src) {
+            audioRef.current.play().catch(() => speakNextRef.current?.())
+          } else {
+            speakNextRef.current?.()
+          }
+        })
+        navigator.mediaSession.setActionHandler('pause', () => {
+          pausedRef.current = true
+          setIsPaused(true)
+          if (audioRef.current) audioRef.current.pause()
+        })
+        navigator.mediaSession.setActionHandler('seekbackward', null)
+        navigator.mediaSession.setActionHandler('seekforward', null)
+      } catch (e) {
+        console.warn('[MediaSession] 初始化失败', e)
+      }
+    }
+
+    // === 页面从后台回到前台时，若应播却没播，重启链条 ===
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        if (!stoppedRef.current && !pausedRef.current && speakingRef.current) {
+          // 重新申请 wake lock（页面在后台时可能被系统释放）
+          requestWakeLockRef.current?.()
+          // 检测并恢复
+          const audio = audioRef.current
+          if (!audio || audio.paused || audio.ended) {
+            console.warn('[Visibility] 回到前台，音频已停，重启链条')
+            speakNextRef.current?.()
+          }
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    // === keepalive 兜底：每 5 秒检查一次播放是否卡住 ===
+    keepaliveRef.current = window.setInterval(checkPlaybackHealth, 5000)
+
     return () => {
       document.removeEventListener('touchstart', unlockAudio)
       document.removeEventListener('click', unlockAudio)
+      document.removeEventListener('visibilitychange', handleVisibility)
+      if (keepaliveRef.current !== null) {
+        clearInterval(keepaliveRef.current)
+        keepaliveRef.current = null
+      }
       if (audioRef.current) {
         audioRef.current.pause()
         audioRef.current.src = ''
         audioRef.current = null
       }
+      releaseWakeLockRef.current?.()
       clearAudioCache()
     }
   }, [clearAudioCache])
+
+  // === Wake Lock 申请/释放：防止屏幕休眠时 Doze 模式冻住 JS ===
+  const requestWakeLock = useCallback(async () => {
+    if (!('wakeLock' in navigator)) return
+    try {
+      if (wakeLockRef.current && !wakeLockRef.current.released) return
+      wakeLockRef.current = await (navigator as any).wakeLock.request('screen')
+      wakeLockRef.current.addEventListener('release', () => {
+        // wake lock 被系统释放（屏幕关/页面切后台等），无需处理
+      })
+    } catch (e) {
+      console.warn('[WakeLock] 申请失败', e)
+    }
+  }, [])
+
+  const releaseWakeLock = useCallback(async () => {
+    if (wakeLockRef.current) {
+      try { await wakeLockRef.current.release() } catch {}
+      wakeLockRef.current = null
+    }
+  }, [])
 
   const fetchTTS = async (text: string, retries = 2): Promise<string> => {
     return new Promise(async (resolve) => {
@@ -189,7 +290,7 @@ export function useSpeech(): UseSpeechReturn {
       if (pausedRef.current) return
 
       await playAudio(url)
-      
+
       // 播放完成后清理当前 URL
       if (url) URL.revokeObjectURL(url)
       audioCacheRef.current.delete(currentIndex)
@@ -198,16 +299,19 @@ export function useSpeech(): UseSpeechReturn {
       if (pausedRef.current) return
 
       currentIndexRef.current++
-      speakNext()
+      speakNextRef.current?.()
     } catch (e) {
       console.error('语音播放错误', e)
       if (stoppedRef.current) return
       currentIndexRef.current++
-      speakNext()
+      speakNextRef.current?.()
     }
   }, [settings.voiceName, settings.speechRate, settings.speechPitch, settings.speechVolume])
 
-  const speak = useCallback(async (text: string, startIndex: number = 0) => {
+  // 把 speakNext 的最新引用挂到 ref，供 keepalive / visibility 回调使用
+  speakNextRef.current = speakNext
+
+  const speak = useCallback(async (text: string, startIndex: number = 0, meta?: { storyTitle?: string; chapterTitle?: string }) => {
     stop()
 
     const sentences = splitSentences(text)
@@ -216,6 +320,23 @@ export function useSpeech(): UseSpeechReturn {
 
     if (sentences.length === 0) return
 
+    // 更新 MediaSession 元数据 + 标题缓存
+    if (meta?.chapterTitle) chapterTitleRef.current = meta.chapterTitle
+    if (meta?.storyTitle) storyTitleRef.current = meta.storyTitle
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: chapterTitleRef.current || '长夜故事',
+          artist: storyTitleRef.current || 'AI 助眠',
+          album: '长夜故事',
+        })
+        navigator.mediaSession.playbackState = 'playing'
+      } catch {}
+    }
+
+    // 申请屏幕 wake lock，防止 Doze 模式冻结
+    requestWakeLock()
+
     stoppedRef.current = false
     pausedRef.current = false
     speakingRef.current = true
@@ -223,7 +344,7 @@ export function useSpeech(): UseSpeechReturn {
     setIsPaused(false)
 
     speakNext()
-  }, [speakNext])
+  }, [speakNext, requestWakeLock])
 
   const speakSentence = useCallback(async (sentence: string) => {
     stop()
@@ -252,17 +373,24 @@ export function useSpeech(): UseSpeechReturn {
     if (audioRef.current) {
       audioRef.current.pause()
     }
+    if ('mediaSession' in navigator) {
+      try { navigator.mediaSession.playbackState = 'paused' } catch {}
+    }
   }, [])
 
   const resume = useCallback(() => {
     pausedRef.current = false
     setIsPaused(false)
+    requestWakeLock()
+    if ('mediaSession' in navigator) {
+      try { navigator.mediaSession.playbackState = 'playing' } catch {}
+    }
     if (audioRef.current && audioRef.current.src) {
       audioRef.current.play().catch(() => speakNext())
     } else {
       speakNext()
     }
-  }, [speakNext])
+  }, [speakNext, requestWakeLock])
 
   const stop = useCallback(() => {
     stoppedRef.current = true
@@ -278,8 +406,12 @@ export function useSpeech(): UseSpeechReturn {
       audioRef.current.pause()
       audioRef.current.src = ''
     }
+    if ('mediaSession' in navigator) {
+      try { navigator.mediaSession.playbackState = 'none' } catch {}
+    }
+    releaseWakeLock()
     clearAudioCache()
-  }, [clearAudioCache])
+  }, [clearAudioCache, releaseWakeLock])
 
   return {
     isSpeaking,

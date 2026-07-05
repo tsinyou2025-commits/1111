@@ -108,7 +108,7 @@ export default function Player() {
 
     if (currentStory.isPlaying) {
       justStartedSpeakingRef.current = true
-      speak(playingChapter.content)
+      speak(playingChapter.content, 0, { storyTitle: currentStory.title, chapterTitle: playingChapter.title })
       speakingChapterRef.current = currentStory.currentChapterIndex
     }
   }, [playingChapter?.status, playingChapter?.content, currentStory.currentChapterIndex, currentStory.isPlaying, isSpeaking, isPaused, speak])
@@ -257,7 +257,7 @@ export default function Player() {
       setCurrentStory({ isPlaying: true })
     } else if (playingChapter?.status === 'completed' && playingChapter.content) {
       justStartedSpeakingRef.current = true
-      speak(playingChapter.content)
+      speak(playingChapter.content, 0, { storyTitle: currentStory.title, chapterTitle: playingChapter.title })
       speakingChapterRef.current = currentStory.currentChapterIndex
       setCurrentStory({ isPlaying: true })
     }
@@ -570,7 +570,7 @@ export default function Player() {
                             setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true })
                             speakingChapterRef.current = viewingChapterIndex
                             justStartedSpeakingRef.current = true
-                            setTimeout(() => speak(viewingChapter.content, idx), 100)
+                            setTimeout(() => speak(viewingChapter.content, idx, { storyTitle: currentStory.title, chapterTitle: viewingChapter.title }), 100)
                           }}
                           className={cn(
                             'transition-colors duration-300 cursor-pointer rounded px-0.5',
