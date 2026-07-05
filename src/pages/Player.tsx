@@ -37,6 +37,8 @@ export default function Player() {
   const { currentStory, settings, addToHistory, setCurrentStory, updateChapter } = useAppStore()
   const { isSpeaking, isPaused, speak, pause, resume, stop, currentSentence, currentSentenceIndex: speechSentenceIndex, availableVoices, setOnChapterEnd } = useSpeech()
   const { isGenerating, isGeneratingOutline, error, generateChapter, stopGenerating } = useStoryGenerator()
+  const generateChapterRef = useRef(generateChapter)
+  generateChapterRef.current = generateChapter
 
   const textContainerRef = useRef<HTMLDivElement>(null)
   const [showTimerMenu, setShowTimerMenu] = useState(false)
@@ -128,13 +130,15 @@ export default function Player() {
   // 当前章播放结束 → 直接回调跳下一章（不依赖 state 变化时序）
   useEffect(() => {
     const handleChapterEnd = () => {
-      if (!currentStoryRef.current.isPlaying) return
+      // 直接从 store 读最新状态，避免闭包捕获旧引用
+      const store = useAppStore.getState()
+      const story = store.currentStory
+      if (!story.isPlaying) return
       if (autoGeneratingRef.current) return
 
-      const story = currentStoryRef.current
       const nextIdx = story.currentChapterIndex + 1
       if (nextIdx >= story.chapters.length) {
-        setCurrentStory({ isPlaying: false })
+        store.setCurrentStory({ isPlaying: false })
         return
       }
 
@@ -144,24 +148,25 @@ export default function Player() {
       autoGeneratingRef.current = true
 
       if (nextChapter.status === 'completed') {
-        setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
+        store.setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
         setViewingChapterIndex(nextIdx)
         autoGeneratingRef.current = false
       } else if (nextChapter.status === 'pending') {
-        setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
+        store.setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
         setViewingChapterIndex(nextIdx)
-        generateChapter(nextIdx).finally(() => {
+        generateChapterRef.current?.(nextIdx)?.finally?.(() => {
           autoGeneratingRef.current = false
         })
       } else {
-        setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
+        // 正在生成中，直接切换过去等待
+        store.setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
         setViewingChapterIndex(nextIdx)
         autoGeneratingRef.current = false
       }
     }
     setOnChapterEnd(handleChapterEnd)
     return () => setOnChapterEnd(null)
-  }, [setOnChapterEnd, setCurrentStory, generateChapter])
+  }, [setOnChapterEnd])
 
   // 预生成下一章：当当前章正在播放且空闲时，提前在后台生成下一章
   useEffect(() => {
