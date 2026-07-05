@@ -45,7 +45,14 @@ function splitSentences(text: string): string[] {
 }
 
 function cleanSentence(text: string): string {
-  return text.replace(/[*#_~`]/g, '')
+  // 清理 markdown 符号
+  let cleaned = text.replace(/[*#_~`]/g, '')
+  // 去掉不影响语气的标点（书名号、引号、括号等），保留内容
+  // 这些标点只涉及内容标注，不应导致 TTS 停顿
+  cleaned = cleaned.replace(/[《》〈〉「」『』""''【】〔〕（）()]/g, '')
+  // 破折号、省略号替换为自然停顿（逗号）
+  cleaned = cleaned.replace(/——+|……+/g, '，')
+  return cleaned
 }
 
 export function useSpeech(): UseSpeechReturn {
