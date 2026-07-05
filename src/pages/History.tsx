@@ -7,6 +7,7 @@ const styleNames: Record<string, string> = {
   fantasy: '奇幻冒险',
   knowledge: '知识科普',
   history: '历史叙事',
+  colloquialhistory: '白话历史',
   nature: '自然风景',
   meditation: '冥想引导',
 }
