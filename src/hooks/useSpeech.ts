@@ -393,6 +393,17 @@ export function useSpeech(): UseSpeechReturn {
     }
   }, [])
 
+  // 章节播完保底检测：确保所有句子播放结束后 isSpeaking 被可靠设为 false
+  useEffect(() => {
+    if (!speakingRef.current) return
+    if (stoppedRef.current || pausedRef.current) return
+    if (currentIndexRef.current >= sentencesRef.current.length && sentencesRef.current.length > 0) {
+      setIsSpeaking(false)
+      setIsPaused(false)
+      speakingRef.current = false
+    }
+  })
+
   // 把 speakNext 的最新引用挂到 ref，供 keepalive / visibility 回调使用
   speakNextRef.current = speakNext
 
