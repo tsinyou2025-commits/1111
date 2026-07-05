@@ -307,10 +307,32 @@ export function useSpeech(): UseSpeechReturn {
       audio.src = url
       audio.volume = settingsRef.current.speechVolume
 
-      audio.onended = () => resolve()
-      audio.onerror = () => resolve()
+      let resolved = false
+      const safeResolve = () => {
+        if (resolved) return
+        resolved = true
+        audio.ontimeupdate = null
+        audio.onended = null
+        audio.onerror = null
+        resolve()
+      }
 
-      audio.play().catch(() => resolve())
+      // 检测接近结尾时提前切入下一句，跳过 Edge TTS 尾部静音
+      const TRIM_THRESHOLD = 0.15  // 跳过最后15%
+      const TRIM_MAX = 0.4         // 最多跳过400ms
+      audio.ontimeupdate = () => {
+        if (!audio.duration || isNaN(audio.duration)) return
+        const trimTime = Math.min(audio.duration * TRIM_THRESHOLD, TRIM_MAX)
+        if (audio.currentTime >= audio.duration - trimTime) {
+          audio.pause()
+          safeResolve()
+        }
+      }
+
+      audio.onended = () => safeResolve()
+      audio.onerror = () => safeResolve()
+
+      audio.play().catch(() => safeResolve())
     })
   }
 
