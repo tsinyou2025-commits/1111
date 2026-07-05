@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Moon, Sparkles, Clock, Play, ChevronRight, Plus, X, Edit3, Trash2 } from 'lucide-react'
+import { Moon, Sparkles, Clock, Play, ChevronRight, Plus, X, Edit3, Trash2, RefreshCw } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useStoryGenerator } from '@/hooks/useStoryGenerator'
 import { cn } from '@/lib/utils'
@@ -61,6 +61,48 @@ export default function Home() {
   const { settings, setCurrentStory, currentStory } = useAppStore()
   const { generateOutline, isGeneratingOutline, error } = useStoryGenerator()
   const [theme, setTheme] = useState(currentStory.theme || '')
+
+  // ===== 版本检查 / 热更新检测 =====
+  const localSha = __APP_COMMIT_SHA__
+  const localMsg = __APP_COMMIT_MSG__
+  const [versionInfo, setVersionInfo] = useState<{
+    remote: { version: string; commitSha: string; commitMessage: string; buildTime: string; env: string } | null
+    isChecking: boolean
+    error: string | null
+  }>({ remote: null, isChecking: false, error: null })
+
+  const checkUpdate = useCallback(async () => {
+    setVersionInfo(prev => ({ ...prev, isChecking: true, error: null }))
+    try {
+      // 加时间戳避免任何缓存
+      const res = await fetch(`/api/version?ts=${Date.now()}`, {
+        method: 'GET',
+        headers: { 'Cache-Control': 'no-cache' },
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setVersionInfo({
+        remote: data.app,
+        isChecking: false,
+        error: null,
+      })
+    } catch (e: any) {
+      setVersionInfo({
+        remote: null,
+        isChecking: false,
+        error: e?.message || '网络错误',
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    // 进入首页时自动检查一次
+    checkUpdate()
+  }, [checkUpdate])
+
+  const needsUpdate = versionInfo.remote
+    ? versionInfo.remote.commitSha !== localSha
+    : false
   const [style, setStyle] = useState(currentStory.style || 'documentary')
   const [customStylePrompt, setCustomStylePrompt] = useState('')
   const [targetHours, setTargetHours] = useState(currentStory.targetHours || 4)
@@ -170,10 +212,63 @@ export default function Home() {
           <p className="text-slate-400 text-lg mb-4">
             让 AI 为你创作专属的睡前故事，伴你安然入眠
           </p>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700/50 text-xs text-slate-500">
-            <span>v1.0.13</span>
-            <span className="w-1 h-1 rounded-full bg-slate-600" />
-            <span>热更新: 2026-07-05 后台保活修复</span>
+          {/* 版本/热更新卡片 */}
+          <div className="inline-flex flex-col items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-800/50 border border-slate-700/50 text-xs text-slate-500">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-slate-300">v1.0.15</span>
+              <span className="w-1 h-1 rounded-full bg-slate-600" />
+              <span className="font-mono text-slate-500">{localSha}</span>
+              {versionInfo.isChecking && (
+                <RefreshCw size={12} className="animate-spin text-slate-500" />
+              )}
+              {!versionInfo.isChecking && needsUpdate && (
+                <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px]">
+                  有新版本
+                </span>
+              )}
+              {!versionInfo.isChecking && !needsUpdate && versionInfo.remote && (
+                <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px]">
+                  已是最新
+                </span>
+              )}
+            </div>
+            {versionInfo.remote && (
+              <div className="text-[10px] text-slate-600">
+                远端: {versionInfo.remote.commitSha} · {versionInfo.remote.commitMessage || '无提交信息'}
+              </div>
+            )}
+            {versionInfo.error && (
+              <div className="text-[10px] text-red-400">
+                检查失败: {versionInfo.error}
+              </div>
+            )}
+            <button
+              onClick={checkUpdate}
+              disabled={versionInfo.isChecking}
+              className="mt-0.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors text-[11px] disabled:opacity-50"
+            >
+              <RefreshCw size={11} className={versionInfo.isChecking ? 'animate-spin' : ''} />
+              <span>{versionInfo.isChecking ? '检查中...' : '检查热更新'}</span>
+            </button>
+            {needsUpdate && versionInfo.remote && (
+              <button
+                onClick={() => {
+                  if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(regs => {
+                      regs.forEach(r => r.unregister())
+                    })
+                  }
+                  if ('caches' in window) {
+                    caches.keys().then(keys => keys.forEach(k => caches.delete(k)))
+                  }
+                  // 延迟后强制刷新（让 SW unregister 完成）
+                  setTimeout(() => window.location.reload(), 300)
+                }}
+                className="mt-1 inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 transition-colors text-[11px]"
+              >
+                清缓存并刷新
+              </button>
+            )}
           </div>
         </div>
 

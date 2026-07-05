@@ -1,11 +1,29 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tsconfigPaths from "vite-tsconfig-paths";
+import { execSync } from 'child_process'
 
 import { VitePWA } from 'vite-plugin-pwa';
 
+// 读取当前 git commit 信息（短 hash + 提交信息第一行）
+function getGitInfo() {
+  try {
+    const sha = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+    const msg = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    return { sha, msg };
+  } catch {
+    return { sha: 'unknown', msg: '' };
+  }
+}
+
+const gitInfo = getGitInfo();
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __APP_COMMIT_SHA__: JSON.stringify(gitInfo.sha),
+    __APP_COMMIT_MSG__: JSON.stringify(gitInfo.msg),
+  },
   plugins: [
     react({
       babel: {
