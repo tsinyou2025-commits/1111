@@ -18,6 +18,8 @@ export interface StoryHistory {
   createdAt: number
   chapters: StoryChapter[]
   totalWords: number
+  currentChapterIndex?: number
+  currentSentenceIndex?: number
 }
 
 export interface AppSettings {

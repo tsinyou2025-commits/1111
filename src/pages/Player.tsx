@@ -321,6 +321,8 @@ export default function Player() {
         createdAt: parseInt(currentStory.id),
         chapters: currentStory.chapters,
         totalWords: currentStory.totalWords,
+        currentChapterIndex: currentStory.currentChapterIndex,
+        currentSentenceIndex: currentStory.currentSentenceIndex,
       })
     }
   }, [currentStory.id, currentStory.chapters.length, completedChapters])

@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { History, Play, Trash2, Clock, BookOpen, ChevronRight } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
+import { useSpeech } from '@/hooks/useSpeech'
 
 const styleNames: Record<string, string> = {
   arthistory: '艺术史',
@@ -15,6 +16,7 @@ const styleNames: Record<string, string> = {
 export default function HistoryPage() {
   const navigate = useNavigate()
   const { history, removeFromHistory, clearHistory, setCurrentStory } = useAppStore()
+  const { stop } = useSpeech()
 
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp)
@@ -27,6 +29,7 @@ export default function HistoryPage() {
   }
 
   const handlePlay = (story: typeof history[0]) => {
+    stop()
     const chapters = story.chapters.map((ch) => ({
       ...ch,
       status: (ch.status || 'completed') as 'pending' | 'generating' | 'completed',
@@ -39,9 +42,10 @@ export default function HistoryPage() {
       customStylePrompt: '',
       targetHours: story.targetHours,
       chapters,
-      currentChapterIndex: 0,
+      currentChapterIndex: story.currentChapterIndex || 0,
+      currentSentenceIndex: story.currentSentenceIndex || 0,
       isGenerating: false,
-      isPlaying: false,
+      isPlaying: true,
       totalWords: story.totalWords,
     })
     navigate('/player')
