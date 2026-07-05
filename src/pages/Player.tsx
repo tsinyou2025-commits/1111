@@ -35,7 +35,7 @@ export default function Player() {
   const location = useLocation()
   const isVisible = location.pathname === '/player'
   const { currentStory, settings, addToHistory, setCurrentStory, updateChapter } = useAppStore()
-  const { isSpeaking, isPaused, speak, pause, resume, stop, currentSentence, currentSentenceIndex: speechSentenceIndex, availableVoices } = useSpeech()
+  const { isSpeaking, isPaused, speak, pause, resume, stop, currentSentence, currentSentenceIndex: speechSentenceIndex, availableVoices, setOnChapterEnd } = useSpeech()
   const { isGenerating, isGeneratingOutline, error, generateChapter, stopGenerating } = useStoryGenerator()
 
   const textContainerRef = useRef<HTMLDivElement>(null)
@@ -54,6 +54,8 @@ export default function Player() {
   const speakingChapterRef = useRef<number>(-1)
   const justStartedSpeakingRef = useRef(false)
   const scrollLockRef = useRef(false)
+  const currentStoryRef = useRef(currentStory)
+  currentStoryRef.current = currentStory
   const [scrolledAway, setScrolledAway] = useState(false)
   const needsInitialScroll = useRef(true)
 
@@ -123,43 +125,43 @@ export default function Player() {
     }
   }, [playingChapter?.status, playingChapter?.content, currentStory.currentChapterIndex, currentStory.isPlaying, isSpeaking, isPaused, speak])
 
-  // 当前章播放结束 → 自动跳下一章
+  // 当前章播放结束 → 直接回调跳下一章（不依赖 state 变化时序）
   useEffect(() => {
-    if (justStartedSpeakingRef.current) return
-    if (isSpeaking || isPaused) return
-    if (!currentStory.isPlaying) return
-    if (!playingChapter || playingChapter.status !== 'completed') return
-    if (speakingChapterRef.current !== currentStory.currentChapterIndex) return
-    if (autoGeneratingRef.current) return
+    const handleChapterEnd = () => {
+      if (!currentStoryRef.current.isPlaying) return
+      if (autoGeneratingRef.current) return
 
-    const nextIdx = currentStory.currentChapterIndex + 1
-    if (nextIdx >= currentStory.chapters.length) {
-      setCurrentStory({ isPlaying: false })
-      return
-    }
+      const story = currentStoryRef.current
+      const nextIdx = story.currentChapterIndex + 1
+      if (nextIdx >= story.chapters.length) {
+        setCurrentStory({ isPlaying: false })
+        return
+      }
 
-    const nextChapter = currentStory.chapters[nextIdx]
-    if (!nextChapter) return
+      const nextChapter = story.chapters[nextIdx]
+      if (!nextChapter) return
 
-    autoGeneratingRef.current = true
+      autoGeneratingRef.current = true
 
-    if (nextChapter.status === 'completed') {
-      setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
-      setViewingChapterIndex(nextIdx)
-      autoGeneratingRef.current = false
-    } else if (nextChapter.status === 'pending') {
-      setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
-      setViewingChapterIndex(nextIdx)
-      generateChapter(nextIdx).finally(() => {
+      if (nextChapter.status === 'completed') {
+        setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
+        setViewingChapterIndex(nextIdx)
         autoGeneratingRef.current = false
-      })
-    } else {
-      // 正在生成中，直接切换过去等待
-      setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
-      setViewingChapterIndex(nextIdx)
-      autoGeneratingRef.current = false
+      } else if (nextChapter.status === 'pending') {
+        setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
+        setViewingChapterIndex(nextIdx)
+        generateChapter(nextIdx).finally(() => {
+          autoGeneratingRef.current = false
+        })
+      } else {
+        setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
+        setViewingChapterIndex(nextIdx)
+        autoGeneratingRef.current = false
+      }
     }
-  }, [isSpeaking, isPaused, currentStory.isPlaying, currentStory.currentChapterIndex, currentStory.chapters.length, playingChapter?.status, generateChapter, setCurrentStory])
+    setOnChapterEnd(handleChapterEnd)
+    return () => setOnChapterEnd(null)
+  }, [setOnChapterEnd, setCurrentStory, generateChapter])
 
   // 预生成下一章：当当前章正在播放且空闲时，提前在后台生成下一章
   useEffect(() => {

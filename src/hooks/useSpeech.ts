@@ -31,6 +31,7 @@ interface UseSpeechReturn {
   resume: () => void
   stop: () => void
   speakSentence: (sentence: string) => void
+  setOnChapterEnd: (cb: (() => void) | null) => void
 }
 
 function splitSentences(text: string): string[] {
@@ -65,6 +66,7 @@ export function useSpeech(): UseSpeechReturn {
   const [isPaused, setIsPaused] = useState(false)
   const [currentSentence, setCurrentSentence] = useState('')
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0)
+  const onChapterEndRef = useRef<(() => void) | null>(null)
 
   const sentencesRef = useRef<string[]>([])
   const currentIndexRef = useRef(0)
@@ -345,6 +347,8 @@ export function useSpeech(): UseSpeechReturn {
       setIsSpeaking(false)
       setIsPaused(false)
       speakingRef.current = false
+      // 章节结束，直接通知
+      onChapterEndRef.current?.()
       return
     }
 
@@ -393,7 +397,7 @@ export function useSpeech(): UseSpeechReturn {
     }
   }, [])
 
-  // 章节播完保底检测：确保所有句子播放结束后 isSpeaking 被可靠设为 false
+  // 章节播完保底检测 + 通知
   useEffect(() => {
     if (!speakingRef.current) return
     if (stoppedRef.current || pausedRef.current) return
@@ -401,6 +405,7 @@ export function useSpeech(): UseSpeechReturn {
       setIsSpeaking(false)
       setIsPaused(false)
       speakingRef.current = false
+      onChapterEndRef.current?.()
     }
   })
 
@@ -513,6 +518,10 @@ export function useSpeech(): UseSpeechReturn {
     clearAudioCache()
   }, [clearAudioCache, releaseWakeLock, stopSilentAudio])
 
+  const setOnChapterEnd = useCallback((cb: (() => void) | null) => {
+    onChapterEndRef.current = cb
+  }, [])
+
   return {
     isSpeaking,
     isPaused,
@@ -524,5 +533,6 @@ export function useSpeech(): UseSpeechReturn {
     resume,
     stop,
     speakSentence,
+    setOnChapterEnd,
   }
 }
