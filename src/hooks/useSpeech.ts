@@ -8,12 +8,21 @@ interface VoiceInfo {
   label: string
 }
 
+// iOS 平台检测：iPad / iPhone / iPod，以及 iPadOS（伪装为 MacIntel）
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+
 const EDGE_VOICES: VoiceInfo[] = [
   { name: 'zh-CN-YunxiNeural', lang: 'zh-CN', label: '云希 - 磁性男声 (推荐)' },
   { name: 'zh-CN-YunyeNeural', lang: 'zh-CN', label: '云野 - 沉稳男声' },
   { name: 'zh-CN-XiaoxiaoNeural', lang: 'zh-CN', label: '晓晓 - 温柔女声' },
   { name: 'zh-CN-XiaoyiNeural', lang: 'zh-CN', label: '晓伊 - 亲切女声' },
   { name: 'zh-CN-YunjianNeural', lang: 'zh-CN', label: '云健 - 影视解说男声' },
+]
+
+// iOS 设备额外展示的苹果原生语音（自动选用最佳，用户无需手动切换）
+const APPLE_VOICES: VoiceInfo[] = [
+  { name: 'apple-native', lang: 'zh-CN', label: '🍎 苹果原生 - Tingting (iOS)' },
 ]
 
 interface UseSpeechReturn {
@@ -79,6 +88,15 @@ export function useSpeech(): UseSpeechReturn {
     if (!speakingRef.current) return
     if (currentIndexRef.current >= sentencesRef.current.length) return
 
+    // iOS 原生：检查 speechSynthesis 是否在播放
+    if (isIOS && 'speechSynthesis' in window) {
+      if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+        console.warn('[Keepalive] iOS 原生语音链条断裂，强制恢复')
+        speakNextRef.current?.()
+      }
+      return
+    }
+
     const audio = audioRef.current
     // audio 元素存在但 paused=true 且 ended=true（idle 状态）→ onended 没触发，链条断了
     if (!audio || audio.paused || audio.ended) {
@@ -97,11 +115,17 @@ export function useSpeech(): UseSpeechReturn {
       audioRef.current.src = 'data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq'
       audioRef.current.play().catch(() => {})
 
+      // iOS PWA: 确保内联播放不被拦截
+      audioRef.current.setAttribute('playsinline', '')
+
       document.removeEventListener('touchstart', unlockAudio)
+      document.removeEventListener('touchend', unlockAudio)
       document.removeEventListener('click', unlockAudio)
     }
 
+    // iOS PWA 模式下 touchend 比 touchstart 更可靠
     document.addEventListener('touchstart', unlockAudio, { once: true })
+    document.addEventListener('touchend', unlockAudio, { once: true })
     document.addEventListener('click', unlockAudio, { once: true })
 
     // === MediaSession 注册：让 Android 把本应用当成媒体会话，加入锁屏控制并降低后台回收概率 ===
@@ -155,6 +179,7 @@ export function useSpeech(): UseSpeechReturn {
 
     return () => {
       document.removeEventListener('touchstart', unlockAudio)
+      document.removeEventListener('touchend', unlockAudio)
       document.removeEventListener('click', unlockAudio)
       document.removeEventListener('visibilitychange', handleVisibility)
       if (keepaliveRef.current !== null) {
@@ -251,6 +276,48 @@ export function useSpeech(): UseSpeechReturn {
     })
   }
 
+  // === iOS 原生语音播放（Web Speech API） ===
+  // 使用苹果内置语音引擎，离线可用，零服务器成本
+  const playNativeSentence = async (text: string): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!('speechSynthesis' in window)) {
+        return resolve()
+      }
+
+      const cleaned = cleanSentence(text)
+      if (!cleaned.trim()) return resolve()
+
+      // 停止任何正在进行的原生语音
+      window.speechSynthesis.cancel()
+
+      const utterance = new SpeechSynthesisUtterance(cleaned)
+      utterance.lang = 'zh-CN'
+      utterance.rate = settings.speechRate
+      utterance.pitch = settings.speechPitch
+      utterance.volume = settings.speechVolume
+
+      // 尝试选择苹果中文语音（Tingting / Meijia / Sinji 等）
+      try {
+        const voices = window.speechSynthesis.getVoices()
+        const appleVoice = voices.find(v =>
+          v.lang.startsWith('zh') && (
+            v.name.includes('Tingting') ||
+            v.name.includes('Meijia') ||
+            v.name.includes('Sinji') ||
+            v.name.includes('Mei-Jia')
+          )
+        ) || voices.find(v => v.lang.startsWith('zh') && v.name.toLowerCase().includes('apple'))
+          || voices.find(v => v.lang === 'zh-CN')
+        if (appleVoice) utterance.voice = appleVoice
+      } catch {}
+
+      utterance.onend = () => resolve()
+      utterance.onerror = () => resolve()
+
+      window.speechSynthesis.speak(utterance)
+    })
+  }
+
   const speakNext = useCallback(async () => {
     if (stoppedRef.current) return
     if (pausedRef.current) return
@@ -268,6 +335,19 @@ export function useSpeech(): UseSpeechReturn {
     setCurrentSentenceIndex(currentIndex)
 
     try {
+      // === iOS 原生：使用苹果原生语音引擎 ===
+      if (isIOS) {
+        await playNativeSentence(sentence)
+
+        if (stoppedRef.current) return
+        if (pausedRef.current) return
+
+        currentIndexRef.current++
+        speakNextRef.current?.()
+        return
+      }
+
+      // === 其他平台：使用 Edge TTS 服务器 ===
       let url = audioCacheRef.current.get(currentIndex)
       if (url === undefined) {
         url = await fetchTTS(sentence)
@@ -354,9 +434,13 @@ export function useSpeech(): UseSpeechReturn {
     setCurrentSentence(sentence)
 
     try {
-      const url = await fetchTTS(sentence)
-      await playAudio(url)
-      if (url) URL.revokeObjectURL(url)
+      if (isIOS) {
+        await playNativeSentence(sentence)
+      } else {
+        const url = await fetchTTS(sentence)
+        await playAudio(url)
+        if (url) URL.revokeObjectURL(url)
+      }
     } catch (e) {
       console.error('语音播放错误', e)
     } finally {
@@ -370,6 +454,10 @@ export function useSpeech(): UseSpeechReturn {
   const pause = useCallback(() => {
     pausedRef.current = true
     setIsPaused(true)
+    // iOS 原生：暂停 speechSynthesis
+    if (isIOS && 'speechSynthesis' in window) {
+      try { window.speechSynthesis.pause() } catch {}
+    }
     if (audioRef.current) {
       audioRef.current.pause()
     }
@@ -384,6 +472,17 @@ export function useSpeech(): UseSpeechReturn {
     requestWakeLock()
     if ('mediaSession' in navigator) {
       try { navigator.mediaSession.playbackState = 'playing' } catch {}
+    }
+    // iOS 原生：恢复 speechSynthesis
+    if (isIOS && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.resume()
+        // 如果队列空了（之前 cancel 过），从当前句子重新开始
+        if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+          speakNext()
+        }
+        return
+      } catch {}
     }
     if (audioRef.current && audioRef.current.src) {
       audioRef.current.play().catch(() => speakNext())
@@ -402,6 +501,10 @@ export function useSpeech(): UseSpeechReturn {
     setCurrentSentenceIndex(0)
     currentIndexRef.current = 0
 
+    // iOS 原生：取消所有原生语音
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel() } catch {}
+    }
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.src = ''
@@ -418,7 +521,7 @@ export function useSpeech(): UseSpeechReturn {
     isPaused,
     currentSentence,
     currentSentenceIndex,
-    availableVoices: EDGE_VOICES,
+    availableVoices: isIOS ? APPLE_VOICES : EDGE_VOICES,
     speak,
     pause,
     resume,

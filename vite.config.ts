@@ -36,7 +36,7 @@ export default defineConfig({
     tsconfigPaths(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'apple-touch-icon-152.png', 'apple-touch-icon-120.png'],
       manifest: {
         name: '长夜故事',
         short_name: '长夜故事',
@@ -52,6 +52,21 @@ export default defineConfig({
             sizes: 'any',
             type: 'image/svg+xml',
             purpose: 'any maskable'
+          },
+          {
+            src: '/apple-touch-icon.png',
+            sizes: '180x180',
+            type: 'image/png',
+          },
+          {
+            src: '/apple-touch-icon-152.png',
+            sizes: '152x152',
+            type: 'image/png',
+          },
+          {
+            src: '/apple-touch-icon-120.png',
+            sizes: '120x120',
+            type: 'image/png',
           }
         ]
       },
