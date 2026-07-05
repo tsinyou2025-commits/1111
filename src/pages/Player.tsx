@@ -195,15 +195,15 @@ export default function Player() {
     }
   }, [isSpeaking])
 
-  // 滚动到当前播放句子的通用函数
+  // 滚动到当前播放句子的通用函数（用户触发定位时用 instant，秒到）
   const scrollToCurrentSentence = useCallback(() => {
     setTimeout(() => {
       const el = document.querySelector('[data-sentence-active="true"]')
       if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.scrollIntoView({ behavior: 'instant', block: 'center' })
         setScrolledAway(false)
       }
-    }, 150)
+    }, 50)
   }, [])
 
   // 进入播放页时首次滚动到当前播放位置
@@ -240,7 +240,7 @@ export default function Player() {
     scrollLockRef.current = true
     const timer = setTimeout(() => {
       scrollLockRef.current = false
-    }, 300)
+    }, 150)
 
     const el = document.querySelector('[data-sentence-active="true"]')
     if (el) {

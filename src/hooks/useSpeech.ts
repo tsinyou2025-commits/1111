@@ -69,6 +69,7 @@ export function useSpeech(): UseSpeechReturn {
   const speakingRef = useRef(false)
   const pausedRef = useRef(false)
   const stoppedRef = useRef(true)
+  const isSpeakingNextRef = useRef(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioCacheRef = useRef<Map<number, string>>(new Map())
   const prefetchingRef = useRef<Set<number>>(new Set())
@@ -94,14 +95,15 @@ export function useSpeech(): UseSpeechReturn {
   const speakNextRef = useRef<(() => Promise<void>) | null>(null)
 
   // 检测链条是否断裂：5 秒一次，如果「应该播放」但音频没在播，则重启
+  // 加 isSpeakingNextRef 防重入：如果 speakNext 正在 fetch/play 中，不重复触发
   const checkPlaybackHealth = () => {
     if (stoppedRef.current) return
     if (pausedRef.current) return
     if (!speakingRef.current) return
+    if (isSpeakingNextRef.current) return  // 正在处理中，不重复
     if (currentIndexRef.current >= sentencesRef.current.length) return
 
     const audio = audioRef.current
-    // audio 元素存在但 paused=true 且 ended=true（idle 状态）→ onended 没触发，链条断了
     if (!audio || audio.paused || audio.ended) {
       console.warn('[Keepalive] 检测到播放链条断裂，强制恢复')
       speakNextRef.current?.()
@@ -313,7 +315,10 @@ export function useSpeech(): UseSpeechReturn {
   const speakNext = useCallback(async () => {
     if (stoppedRef.current) return
     if (pausedRef.current) return
+    if (isSpeakingNextRef.current) return  // 防重入：已在处理中
+    isSpeakingNextRef.current = true
 
+    try {
     const currentIndex = currentIndexRef.current
     if (currentIndex >= sentencesRef.current.length) {
       setIsSpeaking(false)
@@ -364,6 +369,9 @@ export function useSpeech(): UseSpeechReturn {
       if (stoppedRef.current) return
       currentIndexRef.current++
       speakNextRef.current?.()
+    }
+    } finally {
+      isSpeakingNextRef.current = false
     }
   }, [])
 

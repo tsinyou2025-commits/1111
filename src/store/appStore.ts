@@ -158,7 +158,7 @@ export const useAppStore = create<AppState>()(
         history: state.history,
         currentStory: {
           ...state.currentStory,
-          isPlaying: false,  // 恢复时不自动播放
+          // isPlaying 保持真实状态，用于重启后自动续播
           isGenerating: false,
           isGeneratingOutline: false,
         },
