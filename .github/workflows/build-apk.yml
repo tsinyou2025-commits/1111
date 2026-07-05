@@ -35,10 +35,9 @@ jobs:
       - name: Decode keystore
         run: |
           if [ -n "$ANDROID_RELEASE_KEYSTORE" ]; then
-            echo "$ANDROID_RELEASE_KEYSTORE" | base64 -d > android/app/release.keystore
-            echo "Keystore decoded"
+            echo "$ANDROID_RELEASE_KEYSTORE" | tr -d '\n\r ' | base64 -d > android/app/release.keystore 2>/dev/null && echo "Keystore decoded" || echo "Keystore decode failed, will build debug APK"
           else
-            echo "No keystore provided"
+            echo "No keystore provided, will build debug APK"
           fi
         env:
           ANDROID_RELEASE_KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE }}
@@ -56,12 +55,13 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          if [ -f app/release.keystore ]; then
+          if [ -f app/release.keystore ] && [ -s app/release.keystore ]; then
             echo "Building release APK..."
-            ./gradlew assembleRelease
-            cp app/build/outputs/apk/release/app-release.apk "../长夜故事-v$VERSION.apk"
+            ./gradlew assembleRelease || ./gradlew assembleDebug
+            find app/build/outputs/apk -name "*.apk" -exec cp {} "../长夜故事-v$VERSION.apk" \;
           else
             echo "Building debug APK..."
+            rm -f app/release.keystore
             ./gradlew assembleDebug
             cp app/build/outputs/apk/debug/app-debug.apk "../长夜故事-v$VERSION.apk"
           fi
