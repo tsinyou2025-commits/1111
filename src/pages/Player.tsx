@@ -56,10 +56,14 @@ export default function Player() {
   const viewingChapter = currentStory.chapters[viewingChapterIndex]
   const completedChapters = currentStory.chapters.filter((c) => c.status === 'completed').length
 
-  // 拆分句子用于高亮
-  const sentences = viewingChapter?.content
-    ? viewingChapter.content.match(/[^。！？.!?]+[。！？.!?]+/g) || [viewingChapter.content]
+  // 拆分段落和句子用于高亮显示
+  const paragraphs = viewingChapter?.content
+    ? viewingChapter.content.split(/\n\n+/).filter(p => p.trim())
     : []
+  const paragraphsAndSentences = paragraphs.map(para => ({
+    text: para,
+    sentences: para.match(/[^\u3002\uff01\uff1f.!?]+[\u3002\uff01\uff1f.!?]+/g) || [para],
+  }))
 
   // 当后台播放章节自动切换时，如果用户没有在浏览其他章节，则自动跟随
   useEffect(() => {
@@ -571,33 +575,46 @@ export default function Player() {
                     </p>
                   )}
                   <div className={cn(
-                    'text-lg md:text-xl leading-loose text-slate-300/90',
+                    'text-lg md:text-xl leading-loose text-slate-300/90 space-y-6',
                     settings.fontSize === 'small' && 'text-base',
                     settings.fontSize === 'large' && 'text-2xl'
-                  )} style={{ textIndent: '2em' }}>
+                  )}>
                     {viewingChapter.content ? (
-                      sentences.map((s, idx) => (
-                        <span
-                          key={idx}
-                          data-sentence-active={viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence}
-                          onClick={() => {
-                            // 点击任意句子，从该句开始播放
-                            stop()
-                            setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true })
-                            speakingChapterRef.current = viewingChapterIndex
-                            justStartedSpeakingRef.current = true
-                            setTimeout(() => speak(viewingChapter.content, idx, { storyTitle: currentStory.title, chapterTitle: viewingChapter.title }), 100)
-                          }}
-                          className={cn(
-                            'transition-colors duration-300 cursor-pointer rounded px-0.5',
-                            viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence
-                              ? 'text-amber-300 bg-amber-500/10'
-                              : 'hover:bg-slate-700/40 hover:text-slate-100'
-                          )}
-                        >
-                          {s}
-                        </span>
-                      ))
+                      paragraphsAndSentences.map((para, pIdx) => {
+                        // 计算该段落第一句的全局索引
+                        let globalStart = 0
+                        for (let i = 0; i < pIdx; i++) {
+                          globalStart += paragraphsAndSentences[i].sentences.length
+                        }
+                        return (
+                          <p key={pIdx} style={{ textIndent: '2em' }}>
+                            {para.sentences.map((s, sIdx) => {
+                              const globalIdx = globalStart + sIdx
+                              return (
+                                <span
+                                  key={sIdx}
+                                  data-sentence-active={viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence}
+                                  onClick={() => {
+                                    stop()
+                                    setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true })
+                                    speakingChapterRef.current = viewingChapterIndex
+                                    justStartedSpeakingRef.current = true
+                                    setTimeout(() => speak(viewingChapter.content, globalIdx, { storyTitle: currentStory.title, chapterTitle: viewingChapter.title }), 100)
+                                  }}
+                                  className={cn(
+                                    'transition-colors duration-300 cursor-pointer rounded px-0.5',
+                                    viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence
+                                      ? 'text-amber-300 bg-amber-500/10'
+                                      : 'hover:bg-slate-700/40 hover:text-slate-100'
+                                  )}
+                                >
+                                  {s}
+                                </span>
+                              )
+                            })}
+                          </p>
+                        )
+                      })
                     ) : (
                       viewingChapter.status === 'generating' ? (
                         <div className="text-center py-10">
