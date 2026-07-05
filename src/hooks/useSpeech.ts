@@ -339,10 +339,7 @@ export function useSpeech(): UseSpeechReturn {
   const speakNext = useCallback(async () => {
     if (stoppedRef.current) return
     if (pausedRef.current) return
-    if (isSpeakingNextRef.current) return  // 防重入：已在处理中
-    isSpeakingNextRef.current = true
 
-    try {
     const currentIndex = currentIndexRef.current
     if (currentIndex >= sentencesRef.current.length) {
       setIsSpeaking(false)
@@ -393,9 +390,6 @@ export function useSpeech(): UseSpeechReturn {
       if (stoppedRef.current) return
       currentIndexRef.current++
       speakNextRef.current?.()
-    }
-    } finally {
-      isSpeakingNextRef.current = false
     }
   }, [])
 
