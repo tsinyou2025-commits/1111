@@ -33,7 +33,7 @@ const timerOptions = [
 export default function Player() {
   const navigate = useNavigate()
   const { currentStory, settings, addToHistory, setCurrentStory, updateChapter } = useAppStore()
-  const { isSpeaking, isPaused, speak, pause, resume, stop, currentSentence, availableVoices } = useSpeech()
+  const { isSpeaking, isPaused, speak, pause, resume, stop, currentSentence, currentSentenceIndex: speechSentenceIndex, availableVoices } = useSpeech()
   const { isGenerating, isGeneratingOutline, error, generateChapter, stopGenerating } = useStoryGenerator()
 
   const textContainerRef = useRef<HTMLDivElement>(null)
@@ -45,6 +45,7 @@ export default function Player() {
   const [timerRemaining, setTimerRemaining] = useState(0)
   const [localVolume, setLocalVolume] = useState(settings.speechVolume)
   const [localRate, setLocalRate] = useState(settings.speechRate)
+  const speedOptions = [0.75, 0.85, 1, 1.25, 1.5, 2]
   const timerRef = useRef<number | null>(null)
   const startedStoryIdRef = useRef<string | null>(null)
   const autoGeneratingRef = useRef(false)
@@ -78,6 +79,13 @@ export default function Player() {
     }
   }, [currentStory.theme, currentStory.id])
 
+  // 播放位置持久化：实时保存当前句子索引到 store
+  useEffect(() => {
+    if (isSpeaking && speechSentenceIndex >= 0) {
+      setCurrentStory({ currentSentenceIndex: speechSentenceIndex })
+    }
+  }, [speechSentenceIndex, isSpeaking, setCurrentStory])
+
   // 故事切换时：重置状态，生成第一章
   useEffect(() => {
     if (!currentStory.id) return
@@ -106,7 +114,7 @@ export default function Player() {
 
     if (currentStory.isPlaying) {
       justStartedSpeakingRef.current = true
-      speak(playingChapter.content, 0, { storyTitle: currentStory.title, chapterTitle: playingChapter.title })
+      speak(playingChapter.content, currentStory.currentSentenceIndex || 0, { storyTitle: currentStory.title, chapterTitle: playingChapter.title })
       speakingChapterRef.current = currentStory.currentChapterIndex
     }
   }, [playingChapter?.status, playingChapter?.content, currentStory.currentChapterIndex, currentStory.isPlaying, isSpeaking, isPaused, speak])
@@ -132,18 +140,18 @@ export default function Player() {
     autoGeneratingRef.current = true
 
     if (nextChapter.status === 'completed') {
-      setCurrentStory({ currentChapterIndex: nextIdx })
+      setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
       setViewingChapterIndex(nextIdx)
       autoGeneratingRef.current = false
     } else if (nextChapter.status === 'pending') {
-      setCurrentStory({ currentChapterIndex: nextIdx })
+      setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
       setViewingChapterIndex(nextIdx)
       generateChapter(nextIdx).finally(() => {
         autoGeneratingRef.current = false
       })
     } else {
       // 正在生成中，直接切换过去等待
-      setCurrentStory({ currentChapterIndex: nextIdx })
+      setCurrentStory({ currentChapterIndex: nextIdx, currentSentenceIndex: 0 })
       setViewingChapterIndex(nextIdx)
       autoGeneratingRef.current = false
     }
@@ -255,11 +263,11 @@ export default function Player() {
       setCurrentStory({ isPlaying: true })
     } else if (playingChapter?.status === 'completed' && playingChapter.content) {
       justStartedSpeakingRef.current = true
-      speak(playingChapter.content, 0, { storyTitle: currentStory.title, chapterTitle: playingChapter.title })
+      speak(playingChapter.content, currentStory.currentSentenceIndex || 0, { storyTitle: currentStory.title, chapterTitle: playingChapter.title })
       speakingChapterRef.current = currentStory.currentChapterIndex
       setCurrentStory({ isPlaying: true })
     }
-  }, [isSpeaking, isPaused, playingChapter, currentStory.currentChapterIndex, speak, pause, resume, setCurrentStory])
+  }, [isSpeaking, isPaused, playingChapter, currentStory.currentChapterIndex, currentStory.currentSentenceIndex, speak, pause, resume, setCurrentStory])
 
   const handlePrevChapter = () => {
     if (currentStory.currentChapterIndex > 0) {
@@ -267,7 +275,7 @@ export default function Player() {
       const prevChapter = currentStory.chapters[prevIdx]
       if (prevChapter?.status === 'completed') {
         stop()
-        setCurrentStory({ currentChapterIndex: prevIdx, isPlaying: true })
+        setCurrentStory({ currentChapterIndex: prevIdx, isPlaying: true, currentSentenceIndex: 0 })
         setViewingChapterIndex(prevIdx)
         speakingChapterRef.current = prevIdx
         justStartedSpeakingRef.current = true
@@ -284,7 +292,7 @@ export default function Player() {
     if (nextChapter) {
       if (nextChapter.status === 'completed') {
         stop()
-        setCurrentStory({ currentChapterIndex: nextIdx, isPlaying: true })
+        setCurrentStory({ currentChapterIndex: nextIdx, isPlaying: true, currentSentenceIndex: 0 })
         setViewingChapterIndex(nextIdx)
         speakingChapterRef.current = nextIdx
         justStartedSpeakingRef.current = true
@@ -292,7 +300,7 @@ export default function Player() {
           speak(nextChapter.content)
         }, 100)
       } else if (nextChapter.status === 'pending') {
-        setCurrentStory({ currentChapterIndex: nextIdx, isPlaying: true })
+        setCurrentStory({ currentChapterIndex: nextIdx, isPlaying: true, currentSentenceIndex: 0 })
         setViewingChapterIndex(nextIdx)
         generateChapter(nextIdx)
       }
@@ -312,13 +320,13 @@ export default function Player() {
     setViewingChapterIndex(index)
     if (chapter.status === 'completed' && chapter.content) {
       stop()
-      setCurrentStory({ currentChapterIndex: index, isPlaying: true })
+      setCurrentStory({ currentChapterIndex: index, isPlaying: true, currentSentenceIndex: 0 })
       speakingChapterRef.current = index
       justStartedSpeakingRef.current = true
       setTimeout(() => speak(chapter.content), 100)
     } else if (chapter.status === 'pending') {
       stop()
-      setCurrentStory({ currentChapterIndex: index, isPlaying: true })
+      setCurrentStory({ currentChapterIndex: index, isPlaying: true, currentSentenceIndex: 0 })
       generateChapter(index)
     }
   }
@@ -336,14 +344,14 @@ export default function Player() {
     stop()
 
     if (chapter.status === 'completed') {
-      setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true })
+      setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true, currentSentenceIndex: 0 })
       speakingChapterRef.current = viewingChapterIndex
       justStartedSpeakingRef.current = true
       setTimeout(() => {
         speak(chapter.content)
       }, 100)
     } else if (chapter.status === 'pending') {
-      setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true })
+      setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true, currentSentenceIndex: 0 })
       generateChapter(viewingChapterIndex)
     }
   }
@@ -375,7 +383,7 @@ export default function Player() {
   if (!isVisible) {
     if (!currentStory.id || !playingChapter) return null
     return (
-      <div className="fixed bottom-[80px] left-4 right-4 md:bottom-8 md:left-auto md:right-8 md:w-96 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-4 shadow-2xl z-50 flex items-center gap-4">
+      <div className="fixed bottom-[80px] left-4 right-4 md:bottom-8 md:left-auto md:right-8 md:w-96 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-4 shadow-2xl z-50 flex items-center gap-3">
         <div 
           className="flex-1 min-w-0 cursor-pointer"
           onClick={() => navigate('/player')}
@@ -392,16 +400,28 @@ export default function Player() {
           </div>
         </div>
         <button
+          onClick={() => {
+            const currentIdx = speedOptions.indexOf(settings.speechRate)
+            const nextIdx = (currentIdx + 1) % speedOptions.length
+            const newRate = speedOptions[nextIdx]
+            setLocalRate(newRate)
+            useAppStore.getState().setSettings({ speechRate: newRate })
+          }}
+          className="h-9 px-2.5 flex-shrink-0 rounded-lg bg-slate-700/80 text-slate-300 text-xs font-bold flex items-center justify-center active:scale-95 transition-all"
+        >
+          {settings.speechRate}x
+        </button>
+        <button
           onClick={handlePlayPause}
           disabled={playingChapter?.status !== 'completed' || !playingChapter?.content}
-          className="w-12 h-12 flex-shrink-0 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-900 flex items-center justify-center shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+          className="w-11 h-11 flex-shrink-0 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-900 flex items-center justify-center shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
         >
           {isGenerating ? (
-            <Loader2 size={20} className="animate-spin" />
+            <Loader2 size={18} className="animate-spin" />
           ) : isSpeaking && !isPaused ? (
-            <Pause size={20} fill="currentColor" />
+            <Pause size={18} fill="currentColor" />
           ) : (
-            <Play size={20} fill="currentColor" className="ml-0.5" />
+            <Play size={18} fill="currentColor" className="ml-0.5" />
           )}
         </button>
       </div>
@@ -596,7 +616,7 @@ export default function Player() {
                                   data-sentence-active={viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence}
                                   onClick={() => {
                                     stop()
-                                    setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true })
+                                    setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true, currentSentenceIndex: globalIdx })
                                     speakingChapterRef.current = viewingChapterIndex
                                     justStartedSpeakingRef.current = true
                                     setTimeout(() => speak(viewingChapter.content, globalIdx, { storyTitle: currentStory.title, chapterTitle: viewingChapter.title }), 100)
