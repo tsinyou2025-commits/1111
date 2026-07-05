@@ -32,6 +32,8 @@ const timerOptions = [
 
 export default function Player() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const isVisible = location.pathname === '/player'
   const { currentStory, settings, addToHistory, setCurrentStory, updateChapter } = useAppStore()
   const { isSpeaking, isPaused, speak, pause, resume, stop, currentSentence, currentSentenceIndex: speechSentenceIndex, availableVoices } = useSpeech()
   const { isGenerating, isGeneratingOutline, error, generateChapter, stopGenerating } = useStoryGenerator()
@@ -52,6 +54,8 @@ export default function Player() {
   const speakingChapterRef = useRef<number>(-1)
   const justStartedSpeakingRef = useRef(false)
   const scrollLockRef = useRef(false)
+  const [scrolledAway, setScrolledAway] = useState(false)
+  const needsInitialScroll = useRef(true)
 
   const playingChapter = currentStory.chapters[currentStory.currentChapterIndex]
   const viewingChapter = currentStory.chapters[viewingChapterIndex]
@@ -189,6 +193,42 @@ export default function Player() {
     if (isSpeaking) {
       justStartedSpeakingRef.current = false
     }
+  }, [isSpeaking])
+
+  // 滚动到当前播放句子的通用函数
+  const scrollToCurrentSentence = useCallback(() => {
+    setTimeout(() => {
+      const el = document.querySelector('[data-sentence-active="true"]')
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        setScrolledAway(false)
+      }
+    }, 150)
+  }, [])
+
+  // 进入播放页时首次滚动到当前播放位置
+  useEffect(() => {
+    if (!needsInitialScroll.current) return
+    if (!currentSentence) return
+    if (!isVisible) return
+    needsInitialScroll.current = false
+    scrollToCurrentSentence()
+  }, [currentSentence, isVisible, scrollToCurrentSentence])
+
+  // 检测用户是否手动滚动离开了当前句子
+  useEffect(() => {
+    const container = textContainerRef.current
+    if (!container) return
+    const handleScroll = () => {
+      const activeEl = document.querySelector('[data-sentence-active="true"]')
+      if (!activeEl) return
+      const rect = activeEl.getBoundingClientRect()
+      const containerRect = container.getBoundingClientRect()
+      const isInView = rect.top >= containerRect.top && rect.bottom <= containerRect.bottom
+      setScrolledAway(!isInView)
+    }
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    return () => container.removeEventListener('scroll', handleScroll)
   }, [isSpeaking])
 
   // 滚动到当前句子（生成中不滚动，避免鬼畜）
@@ -379,7 +419,6 @@ export default function Player() {
     }
   }
 
-  const isVisible = location.pathname === '/player'
   if (!isVisible) {
     if (!currentStory.id || !playingChapter) return null
     return (
@@ -543,16 +582,11 @@ export default function Player() {
         <div className="flex-1 relative overflow-hidden">
           <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-slate-950/80 via-transparent to-slate-950/80 z-10" />
           
-          {(viewingChapterIndex !== currentStory.currentChapterIndex) && (
+          {(viewingChapterIndex !== currentStory.currentChapterIndex || scrolledAway) && isSpeaking && (
             <button
               onClick={() => {
                 setViewingChapterIndex(currentStory.currentChapterIndex)
-                setTimeout(() => {
-                  const el = document.querySelector('[data-sentence-active="true"]')
-                  if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                  }
-                }, 100)
+                scrollToCurrentSentence()
               }}
               className="absolute bottom-8 right-8 z-20 flex items-center gap-2 px-4 py-2 bg-amber-500 text-slate-900 rounded-full shadow-lg shadow-amber-500/20 hover:scale-105 active:scale-95 transition-all font-medium text-sm"
             >
