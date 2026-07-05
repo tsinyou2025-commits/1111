@@ -52,6 +52,8 @@ function cleanSentence(text: string): string {
   cleaned = cleaned.replace(/[《》〈〉「」『』""''【】〔〕（）()]/g, '')
   // 破折号、省略号替换为自然停顿（逗号）
   cleaned = cleaned.replace(/——+|……+/g, '，')
+  // 去掉句尾句号、感叹号、问号（每个句子已单独发送，句尾标点只会额外延长停顿）
+  cleaned = cleaned.replace(/[。.！!？?]+$/, '')
   return cleaned
 }
 
