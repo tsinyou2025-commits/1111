@@ -58,6 +58,8 @@ export default function Player() {
   const speakingChapterRef = useRef<number>(-1)
   const justStartedSpeakingRef = useRef(false)
   const scrollLockRef = useRef(false)
+  const userScrolledRef = useRef(false)
+  const scrollResumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const currentStoryRef = useRef(currentStory)
   currentStoryRef.current = currentStory
   const [scrolledAway, setScrolledAway] = useState(false)
@@ -240,11 +242,31 @@ export default function Player() {
     return () => container.removeEventListener('scroll', handleScroll)
   }, [isSpeaking])
 
-  // 滚动到当前句子（生成中不滚动，避免鬼畜）
+  // 用户手动滚动后，暂停自动聚焦 11 秒
+  useEffect(() => {
+    const container = textContainerRef.current
+    if (!container) return
+    const handleUserScroll = () => {
+      if (!isSpeaking) return
+      userScrolledRef.current = true
+      if (scrollResumeTimerRef.current) clearTimeout(scrollResumeTimerRef.current)
+      scrollResumeTimerRef.current = setTimeout(() => {
+        userScrolledRef.current = false
+      }, 11000)
+    }
+    container.addEventListener('scroll', handleUserScroll, { passive: true })
+    return () => {
+      container.removeEventListener('scroll', handleUserScroll)
+      if (scrollResumeTimerRef.current) clearTimeout(scrollResumeTimerRef.current)
+    }
+  }, [isSpeaking])
+
+  // 滚动到当前句子（生成中不滚动，避免鬼畜；用户手动滚动后等 11 秒再恢复）
   useEffect(() => {
     if (!currentSentence) return
     if (isGenerating) return
     if (scrollLockRef.current) return
+    if (userScrolledRef.current) return
 
     scrollLockRef.current = true
     const timer = setTimeout(() => {
@@ -366,10 +388,8 @@ export default function Player() {
     setContextMenuIdx(null)
     const chapter = currentStory.chapters[index]
     if (!chapter) return
-    // 重置章节状态为 pending，然后重新生成
+    // 重置章节状态为 pending，然后重新生成（不影响当前播放）
     updateChapter(index, { status: 'pending', content: '', summary: '', wordCount: 0 })
-    setCurrentStory({ currentChapterIndex: index })
-    setViewingChapterIndex(index)
     generateChapter(index)
   }
 
