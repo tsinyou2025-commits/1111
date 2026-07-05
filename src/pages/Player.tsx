@@ -44,6 +44,8 @@ export default function Player() {
   const [showTimerMenu, setShowTimerMenu] = useState(false)
   const [showVolumeMenu, setShowVolumeMenu] = useState(false)
   const [showChapters, setShowChapters] = useState(false)
+  const [contextMenuIdx, setContextMenuIdx] = useState<number | null>(null)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [viewingChapterIndex, setViewingChapterIndex] = useState(currentStory.currentChapterIndex)
   const [timerMinutes, setTimerMinutes] = useState(0)
   const [timerRemaining, setTimerRemaining] = useState(0)
@@ -359,6 +361,37 @@ export default function Player() {
     setShowChapters(false)
   }
 
+  // 长按章节：重新生成
+  const handleRegenerateChapter = (index: number) => {
+    setContextMenuIdx(null)
+    const chapter = currentStory.chapters[index]
+    if (!chapter) return
+    // 重置章节状态为 pending，然后重新生成
+    updateChapter(index, { status: 'pending', content: '', summary: '', wordCount: 0 })
+    setCurrentStory({ currentChapterIndex: index })
+    setViewingChapterIndex(index)
+    generateChapter(index)
+  }
+
+  // 长按/右键事件处理
+  const handleChapterPointerDown = (idx: number, e: React.PointerEvent) => {
+    // 只响应左键或触摸
+    if (e.button !== 0) return
+    longPressTimerRef.current = setTimeout(() => {
+      setContextMenuIdx(idx)
+    }, 500)
+  }
+  const handleChapterPointerUp = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+  const handleChapterContextMenu = (idx: number, e: React.MouseEvent) => {
+    e.preventDefault()
+    setContextMenuIdx(idx)
+  }
+
   // 点击目录条目：直接切换播放
   const handleSwitchAndPlayChapter = (index: number) => {
     const chapter = currentStory.chapters[index]
@@ -538,12 +571,16 @@ export default function Player() {
         {/* 桌面端目录侧栏 */}
         <div className="hidden md:block w-72 border-r border-slate-800/50 overflow-y-auto">
           <div className="p-4">
-            <h3 className="text-sm font-medium text-slate-400 mb-3 px-2">章节目录 <span className="text-xs text-slate-600">（点击切换播放）</span></h3>
+            <h3 className="text-sm font-medium text-slate-400 mb-3 px-2">章节目录 <span className="text-xs text-slate-600">（点击切换·长按重新生成）</span></h3>
             <div className="space-y-1">
               {currentStory.chapters.map((chapter, idx) => (
                 <button
                   key={idx}
                   onClick={() => handleSwitchAndPlayChapter(idx)}
+                  onPointerDown={(e) => handleChapterPointerDown(idx, e)}
+                  onPointerUp={handleChapterPointerUp}
+                  onPointerLeave={handleChapterPointerUp}
+                  onContextMenu={(e) => handleChapterContextMenu(idx, e)}
                   className={cn(
                     'w-full text-left px-3 py-3 rounded-xl transition-all flex items-start gap-3 group',
                     idx === currentStory.currentChapterIndex
@@ -713,7 +750,7 @@ export default function Player() {
             <div className="flex items-center justify-between p-4 border-b border-slate-800/50">
               <div>
                 <h3 className="text-white font-medium">章节目录</h3>
-                <p className="text-xs text-slate-500 mt-0.5">点击章节直接切换播放</p>
+                <p className="text-xs text-slate-500 mt-0.5">点击切换播放·长按重新生成</p>
               </div>
               <button onClick={() => setShowChapters(false)} className="text-slate-400 hover:text-white">
                 <X size={20} />
@@ -724,6 +761,10 @@ export default function Player() {
                 <button
                   key={idx}
                   onClick={() => handleSwitchAndPlayChapter(idx)}
+                  onPointerDown={(e) => handleChapterPointerDown(idx, e)}
+                  onPointerUp={handleChapterPointerUp}
+                  onPointerLeave={handleChapterPointerUp}
+                  onContextMenu={(e) => handleChapterContextMenu(idx, e)}
                   className={cn(
                     'w-full text-left px-3 py-3 rounded-xl transition-all flex items-start gap-3',
                     idx === currentStory.currentChapterIndex
@@ -926,6 +967,31 @@ export default function Player() {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 长按章节上下文菜单 */}
+      {contextMenuIdx !== null && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setContextMenuIdx(null)} />
+          <div className="relative bg-slate-800 border border-slate-700/50 rounded-2xl p-4 shadow-2xl min-w-[200px]">
+            <p className="text-sm text-slate-400 mb-3 truncate">
+              {currentStory.chapters[contextMenuIdx]?.title || '章节'}
+            </p>
+            <button
+              onClick={() => handleRegenerateChapter(contextMenuIdx)}
+              className="w-full px-4 py-3 rounded-xl text-left text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 transition-colors flex items-center gap-2"
+            >
+              <RefreshCw size={16} />
+              重新生成此章
+            </button>
+            <button
+              onClick={() => setContextMenuIdx(null)}
+              className="w-full px-4 py-3 mt-2 rounded-xl text-left text-slate-400 hover:bg-slate-700/50 transition-colors"
+            >
+              取消
+            </button>
           </div>
         </div>
       )}
