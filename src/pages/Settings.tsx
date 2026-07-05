@@ -390,7 +390,7 @@ export default function Settings() {
             <div>
               <label className="text-sm text-slate-400 mb-3 block flex items-center gap-2">
                 <Mic size={14} />
-                选择语音 (微软云端语音)
+                选择语音
                 <span className="text-xs text-slate-500">（共 {availableVoices.length} 个）</span>
               </label>
               

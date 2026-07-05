@@ -156,6 +156,12 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         settings: state.settings,
         history: state.history,
+        currentStory: {
+          ...state.currentStory,
+          isPlaying: false,  // 恢复时不自动播放
+          isGenerating: false,
+          isGeneratingOutline: false,
+        },
       }),
     }
   )

@@ -70,11 +70,9 @@ export default function Player() {
 
   useEffect(() => {
     if (!currentStory.theme || !currentStory.id) {
-      if (location.pathname === '/player') {
-        navigate('/')
-      }
+      // 不再强制跳转，显示空状态即可
     }
-  }, [currentStory.theme, currentStory.id, navigate, location.pathname])
+  }, [currentStory.theme, currentStory.id])
 
   // 故事切换时：重置状态，生成第一章
   useEffect(() => {
@@ -90,11 +88,7 @@ export default function Player() {
     if (firstChapter?.status === 'pending') {
       generateChapter(0)
     } else if (firstChapter?.status === 'completed' && firstChapter.content) {
-      // 历史记录里的故事，直接开始播放
-      justStartedSpeakingRef.current = true
-      speak(firstChapter.content)
-      setCurrentStory({ isPlaying: true })
-      speakingChapterRef.current = 0
+      // 恢复的故事，不自动播放，用户手动按播放
     }
   }, [currentStory.id, currentStory.chapters.length, isGenerating, generateChapter, speak, setCurrentStory])
 
@@ -406,6 +400,28 @@ export default function Player() {
             <Play size={20} fill="currentColor" className="ml-0.5" />
           )}
         </button>
+      </div>
+    )
+  }
+
+  // === 空状态：没有故事内容 ===
+  if (!currentStory.id || !currentStory.chapters.length) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4">
+        <div className="text-center max-w-md">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-slate-800/50 flex items-center justify-center">
+            <List size={32} className="text-slate-600" />
+          </div>
+          <h2 className="text-xl font-medium text-slate-300 mb-3">还没有内容</h2>
+          <p className="text-slate-500 mb-8">请先生成故事内容，然后就可以开始播放了</p>
+          <button
+            onClick={() => navigate('/')}
+            className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-900 font-medium inline-flex items-center gap-2 shadow-lg shadow-amber-500/20"
+          >
+            <Home size={18} />
+            去生成故事
+          </button>
+        </div>
       </div>
     )
   }
