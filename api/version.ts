@@ -27,8 +27,8 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   // 版本号从 package.json 读
   // 编译时通过 Vite 的 import.meta.glob 或常量注入即可，
   // 这里直接写死当前版本号，与 package.json 同步即可
-  const version = '1.0.14'
-  const apiVersion = '1.0.14'
+  const version = '2.0.1'
+  const apiVersion = '2.0.1'
 
   return res.status(200).json({
     app: {
