@@ -230,15 +230,13 @@ export function useSpeech(): UseSpeechReturn {
     }
   }, [])
 
-  // === iOS 后台保活：播放静音音频保持 audio session ===
-  // iOS Safari/PWA 会在锁屏或切后台时暂停 audio session
+  // === 后台保活：播放静音音频保持 audio session ===
+  // iOS Safari/PWA 和 Android WebView 都会在锁屏或切后台时暂停 audio session
   // 播放一个循环静音 MP3 可以保持 session 存活，让 Edge TTS 音频能继续播放
   const startSilentAudio = useCallback(() => {
-    if (!isIOS) return
     if (silentAudioRef.current) return
     try {
       silentAudioRef.current = new Audio()
-      // 极短的静音 MP3 (约 0.1 秒)
       silentAudioRef.current.src = 'data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq'
       silentAudioRef.current.loop = true
       silentAudioRef.current.volume = 0.01
