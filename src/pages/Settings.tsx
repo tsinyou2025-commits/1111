@@ -670,6 +670,27 @@ export default function Settings() {
           </div>
         )}
 
+        {/* API 服务器配置 - 仅移动端显示 */}
+        {isCapacitor && (
+          <div className="bg-slate-800/30 rounded-2xl border border-slate-700/50 p-6 mb-6">
+            <div className="flex items-center gap-3 mb-6">
+              <Globe size={20} className="text-amber-400" />
+              <h2 className="text-lg font-medium text-white">API 服务器</h2>
+            </div>
+            <div>
+              <label className="text-sm text-slate-400 mb-2 block">自定义 API 服务器地址</label>
+              <input
+                type="text"
+                value={localSettings.customApiServer || ''}
+                onChange={(e) => setLocalSettings({ ...localSettings, customApiServer: e.target.value })}
+                placeholder="https://your-api-server.com"
+                className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700/50 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500/50 transition-all"
+              />
+              <p className="text-xs text-slate-500 mt-1">留空则使用默认服务器。填入你部署的 API 服务器地址可免翻墙使用。</p>
+            </div>
+          </div>
+        )}
+
         {/* 保存按钮 */}
         <button
           onClick={handleSave}

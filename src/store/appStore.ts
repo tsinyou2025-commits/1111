@@ -33,6 +33,7 @@ export interface AppSettings {
   speechVolume: number
   theme: 'dark' | 'light'
   fontSize: 'small' | 'medium' | 'large'
+  customApiServer: string
 }
 
 interface AppState {
@@ -74,6 +75,7 @@ const defaultSettings: AppSettings = {
   speechVolume: 1,
   theme: 'dark',
   fontSize: 'medium',
+  customApiServer: '',
 }
 
 export const useAppStore = create<AppState>()(
