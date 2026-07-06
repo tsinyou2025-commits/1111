@@ -24,6 +24,11 @@ app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 /**
+ * Serve frontend static files
+ */
+app.use(express.static(path.join(process.cwd(), 'dist')))
+
+/**
  * API Routes
  */
 app.use('/api/auth', authRoutes)
@@ -57,6 +62,10 @@ app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
  * 404 handler
  */
 app.use((req: Request, res: Response) => {
+  // 非 API 路由返回前端 index.html（SPA 路由）
+  if (!req.path.startsWith('/api')) {
+    return res.sendFile(path.join(process.cwd(), 'dist', 'index.html'))
+  }
   res.status(404).json({
     success: false,
     error: 'API not found',
