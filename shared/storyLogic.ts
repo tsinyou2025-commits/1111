@@ -44,7 +44,10 @@ export function buildOutlinePrompt(req: OutlineRequest): string {
   return `请为一个关于"${req.theme}"的长篇连载内容设计完整的章节（或模块）目录。
 
 风格与体裁要求：${styleDesc}
-(请严格根据上述要求决定这是一部小说、散文、科普讲解，还是一份严谨的工程/学术文档。绝对不要在非故事体裁中强加小说情节。)
+
+【核心底线原则】：
+1. 极度痛恨写小说！千万不要写小说！绝对不要捏造人物对话、小说情节、虚构故事情节。
+2. 除非用户的要求明确指出是小说，否则一律按专业、客观、严谨的结构化报告/文档/散文/科普文来写。
 
 整体篇幅预估：对应 ${req.targetHours} 小时的阅读/朗读量，共 ${totalChapters} 个章节/模块。
 
@@ -53,9 +56,8 @@ export function buildOutlinePrompt(req: OutlineRequest): string {
 要求：
 1. 每章（模块）有一个简明扼要的标题
 2. 每章（模块）有1-2句话的内容简介，说明本部分主要阐述/讲述什么
-3. 整体结构要符合其体裁的逻辑关系（故事则需起承转合，文档则需总分总/递进等）
+3. 整体结构要符合其体裁的逻辑关系（不能是小说的起承转合，而应是文档的总分总/递进等）
 4. 章节之间要有合理的连贯性
-5. 必须极其严格地遵循指定的【风格与体裁要求】，如果要求是严肃文档，绝对不能写成小说。
 
 请直接返回JSON格式，不要有任何额外说明，格式如下：
 {
@@ -75,14 +77,16 @@ export function buildChapterPrompt(req: GenerateRequest): string {
 
 本部分是全局的第 ${req.chapterIndex + 1} / ${req.totalChapters} 部分。
 
+【核心底线原则】：
+极度痛恨写小说！千万不要写小说！绝对不要捏造人物对话、小说情节、虚构故事情节。除非明确指出是小说，否则一律按专业、客观、严谨的结构化内容输出。
+
 要求：
 1. 本章大约 ${wordsPerChapter} 字左右，内容要充实，细节丰富。
-2. 必须极其严格地遵守给定的【风格与体裁要求】（这是最重要的指令）。如果要求是严谨的工程文档、方案或报告，请直接输出专业严谨的文档正文，【绝对不要】虚构任何人物、对话或小说情节。
-3. 拒绝无意义的废话和凑字数的描写，直接切入正题。
-4. 如果风格要求中包含清晰的结构（如小标题、列表等），请务必照做。
-5. 承上启下要自然，保持整体基调的统一。
-6. 必须合理分段，每个自然段之间用两个换行符（\\n\\n）分隔。
-7. 直接输出内容，不要有任何额外的开场白、说明或标题。`
+2. 拒绝无意义的废话和凑字数的描写，直接切入正题。
+3. 如果风格要求中包含清晰的结构（如小标题、列表等），请务必照做。
+4. 承上启下要自然，保持整体基调的统一。
+5. 必须合理分段，每个自然段之间用两个换行符（\\n\\n）分隔。
+6. 直接输出内容，不要有任何额外的开场白、说明或标题。`
 
   if (req.previousSummary) {
     prompt += `\n\n前文概要：${req.previousSummary}`
@@ -126,7 +130,7 @@ export async function generateOutline(body: OutlineRequest): Promise<any> {
     body: JSON.stringify({
       model: body.model,
       messages: [
-        { role: 'system', content: '你是一位专业的内容创作者，能够极其精准地模仿用户指定的文体、语气和结构进行创作。你绝不输出任何废话、客套话或多余的解释，总是严格遵守用户的格式要求。' },
+        { role: 'system', content: '你是一位专业的内容创作者。极度痛恨写小说！千万不要写小说！绝对不要捏造人物对话、小说情节。你绝不输出任何废话、客套话或多余的解释，严格客观严谨地执行创作。' },
         { role: 'user', content: prompt }
       ],
       stream: false,
@@ -193,7 +197,7 @@ export async function generateChapterStream(
       body: JSON.stringify({
         model: body.model,
         messages: [
-          { role: 'system', content: '你是一位专业的内容创作者，能够极其精准地模仿用户指定的文体、语气和结构进行创作。你绝不输出任何废话、客套话或多余的解释，总是严格遵守用户的格式要求。' },
+          { role: 'system', content: '你是一位专业的内容创作者。极度痛恨写小说！千万不要写小说！绝对不要捏造人物对话、小说情节。你绝不输出任何废话、客套话或多余的解释，严格客观严谨地执行创作。' },
           { role: 'user', content: prompt }
         ],
         stream: true,
@@ -331,7 +335,7 @@ export async function generateGenericStream(
       body: JSON.stringify({
         model: body.model,
         messages: [
-          { role: 'system', content: '你是一位专业的内容创作者，能够精准理解并执行用户的改写或扩写需求。绝不输出多余的解释或客套话，直接输出正文。' },
+          { role: 'system', content: '你是一位专业的内容创作者，能够精准理解并执行用户的改写或扩写需求。极度痛恨写小说！千万不要写小说！不要捏造人物对话。绝不输出多余的解释或客套话，直接输出正文。' },
           { role: 'user', content: prompt }
         ],
         stream: true,

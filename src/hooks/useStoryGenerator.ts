@@ -11,6 +11,7 @@ interface UseStoryGeneratorReturn {
   stopGenerating: () => void
   startBatchGeneration: (startIndex: number, count?: number) => void
   stopBatchGeneration: () => void
+  generateCustomChapter: (chapterIndex: number, prompt: string) => Promise<boolean>
   expandChapter: (chapterIndex: number, currentContent: string, targetWords: number, requirements: string) => Promise<boolean>
   rewriteParagraph: (chapterIndex: number, paragraphIndex: number, originalText: string, requirements: string) => Promise<boolean>
 }
@@ -257,6 +258,49 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
     }
   }, [currentStory.isBatchGenerating, currentStory.isGenerating, currentStory.generationQueue, generateChapter, setCurrentStory])
 
+  const generateCustomChapter = useCallback(async (chapterIndex: number, prompt: string): Promise<boolean> => {
+    if (!settings.apiKey) {
+      setError('请先在设置中配置 API Key')
+      return false
+    }
+
+    const chapter = useAppStore.getState().currentStory.chapters[chapterIndex]
+    if (!chapter) return false
+
+    // Force preempt queue
+    if (abortControllerRef.current) abortControllerRef.current.abort()
+    setIsGenerating(true)
+    setError(null)
+    updateChapter(chapterIndex, { status: 'generating', content: '' }) // Clear existing content if it's a regenerate
+    setCurrentStory({ isGenerating: true })
+
+    return new Promise((resolve) => {
+      let fullContent = ''
+      
+      generateGenericStream(
+        prompt,
+        { aiBaseUrl: settings.aiBaseUrl, apiKey: settings.apiKey, model: settings.model } as any,
+        (content) => {
+          fullContent += content
+          updateChapter(chapterIndex, { content: fullContent, wordCount: fullContent.length })
+        },
+        (finalContent) => {
+          updateChapter(chapterIndex, { content: finalContent, wordCount: finalContent.length, status: 'completed' })
+          setIsGenerating(false)
+          setCurrentStory({ isGenerating: false })
+          resolve(true)
+        },
+        (err) => {
+          setError(err)
+          updateChapter(chapterIndex, { status: 'pending' }) // Revert status
+          setIsGenerating(false)
+          setCurrentStory({ isGenerating: false })
+          resolve(false)
+        }
+      )
+    })
+  }, [settings.apiKey, settings.aiBaseUrl, settings.model, updateChapter, setCurrentStory])
+
   const expandChapter = useCallback(async (chapterIndex: number, currentContent: string, targetWords: number, requirements: string): Promise<boolean> => {
     if (!settings.apiKey) {
       setError('请先在设置中配置 API Key')
@@ -376,6 +420,7 @@ ${originalText}
     stopGenerating,
     startBatchGeneration,
     stopBatchGeneration,
+    generateCustomChapter,
     expandChapter,
     rewriteParagraph,
   }

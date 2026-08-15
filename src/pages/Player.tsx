@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useSpeech } from '@/hooks/useSpeech'
+import { buildChapterPrompt } from '../../shared/storyLogic'
 import { useStoryGenerator } from '@/hooks/useStoryGenerator'
 import { cn } from '@/lib/utils'
 
@@ -39,7 +40,7 @@ export default function Player() {
   const isVisible = location.pathname === '/player'
   const { currentStory, settings, addToHistory, setCurrentStory, updateChapter } = useAppStore()
   const { isSpeaking, isPaused, speak, pause, resume, stop, currentSentence, currentSentenceIndex: speechSentenceIndex, availableVoices, setOnChapterEnd } = useSpeech()
-  const { isGenerating, isGeneratingOutline, error, generateChapter, stopGenerating, startBatchGeneration, stopBatchGeneration, expandChapter, rewriteParagraph } = useStoryGenerator()
+  const { isGenerating, isGeneratingOutline, error, generateChapter, stopGenerating, startBatchGeneration, stopBatchGeneration, expandChapter, rewriteParagraph, generateCustomChapter } = useStoryGenerator()
   const generateChapterRef = useRef(generateChapter)
   generateChapterRef.current = generateChapter
 
@@ -72,11 +73,13 @@ export default function Player() {
   
   // 新增功能的 state
   const [expandModalIdx, setExpandModalIdx] = useState<number | null>(null)
-  const [expandForm, setExpandForm] = useState({ words: 1000, reqs: '' })
+  const [expandForm, setExpandForm] = useState({ words: 1000, prompt: '' })
   const [renameModalIdx, setRenameModalIdx] = useState<number | null>(null)
   const [renameFormTitle, setRenameFormTitle] = useState('')
   const [rewriteModal, setRewriteModal] = useState<{ chapterIdx: number, pIdx: number, text: string } | null>(null)
   const [rewriteReqs, setRewriteReqs] = useState('')
+  const [regenerateModalIdx, setRegenerateModalIdx] = useState<number | null>(null)
+  const [regeneratePrompt, setRegeneratePrompt] = useState('')
   const paragraphLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const playingChapter = currentStory.chapters[currentStory.currentChapterIndex]
@@ -399,14 +402,36 @@ export default function Player() {
     setShowChapters(false)
   }
 
-  // 长按章节：重新生成
-  const handleRegenerateChapter = (index: number) => {
-    setContextMenuIdx(null)
-    const chapter = currentStory.chapters[index]
+  const handleRegenerateChapter = (idx: number) => {
+    const chapter = currentStory.chapters[idx]
     if (!chapter) return
-    // 重置章节状态为 pending，然后重新生成（不影响当前播放）
-    updateChapter(index, { status: 'pending', content: '', summary: '', wordCount: 0 })
-    generateChapter(index)
+    const prevChapter = idx > 0 ? currentStory.chapters[idx - 1] : null
+    const reqBody = {
+      theme: currentStory.theme,
+      style: currentStory.style,
+      customStylePrompt: currentStory.customStylePrompt,
+      targetHours: currentStory.targetHours,
+      chapterIndex: idx,
+      chapterTitle: chapter?.title,
+      totalChapters: currentStory.chapters.length,
+      previousSummary: prevChapter?.summary,
+      previousEnding: prevChapter?.content?.slice(-300),
+      aiBaseUrl: settings.aiBaseUrl,
+      apiKey: settings.apiKey,
+      model: settings.model,
+    }
+    const defaultPrompt = buildChapterPrompt(reqBody)
+    setRegeneratePrompt(defaultPrompt)
+    setRegenerateModalIdx(idx)
+    setContextMenuIdx(null)
+  }
+
+  const handleRegenerateSubmit = async () => {
+    if (regenerateModalIdx === null) return
+    const idx = regenerateModalIdx
+    setRegenerateModalIdx(null)
+    updateChapter(idx, { status: 'pending' })
+    await generateCustomChapter(idx, regeneratePrompt)
   }
 
   // 长按/右键事件处理
@@ -490,10 +515,9 @@ export default function Player() {
   const handleExpandSubmit = async () => {
     if (expandModalIdx === null) return
     const chapter = currentStory.chapters[expandModalIdx]
-    const content = chapter.content
     setExpandModalIdx(null)
-    setContextMenuIdx(null)
-    await expandChapter(expandModalIdx, content, expandForm.words, expandForm.reqs)
+    updateChapter(expandModalIdx, { status: 'pending' })
+    await generateCustomChapter(expandModalIdx, expandForm.prompt)
   }
 
   const handleRewriteSubmit = async () => {
@@ -679,6 +703,25 @@ export default function Player() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      {/* Top Background Pattern */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-[20%] -right-[10%] w-[70%] h-[50%] rounded-full bg-amber-500/10 blur-[120px]" />
+        <div className="absolute top-[20%] -left-[10%] w-[50%] h-[40%] rounded-full bg-orange-500/5 blur-[100px]" />
+      </div>
+
+      {/* Global Generation Queue Banner */}
+      {currentStory.isGenerating && (
+        <div className="fixed top-0 left-0 right-0 z-[60] bg-indigo-500/90 text-white px-4 py-1.5 text-xs font-medium flex items-center justify-center gap-2 shadow-lg backdrop-blur-md">
+          <Loader2 size={14} className="animate-spin" />
+          <span>正在生成: 第 {currentStory.chapters.findIndex(c => c.status === 'generating') + 1} 章</span>
+          {currentStory.generationQueue?.length > 0 && (
+            <span className="opacity-80"> (队列等待: {currentStory.generationQueue.length}章)</span>
+          )}
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className={cn("relative z-10 flex flex-col h-full", currentStory.isGenerating && "pt-6")}>
       {/* 顶部栏 */}
       <div className="flex items-center justify-between px-4 py-4 md:px-8 md:py-6">
         <button
@@ -1197,8 +1240,17 @@ export default function Player() {
             </button>
             <button
               onClick={() => {
+                const words = (currentStory.chapters[contextMenuIdx]?.wordCount || 0) + 1000
+                const initialPrompt = `请你将以下章节进行扩写，目标字数大约在 ${words} 字左右。
+用户的额外要求是：无
+
+现有章节标题：${currentStory.chapters[contextMenuIdx]?.title}
+现有章节内容：
+${currentStory.chapters[contextMenuIdx]?.content || ''}
+
+请直接输出扩写后的完整章节内容，不要包含标题，不要包含任何多余的解释。`
                 setExpandModalIdx(contextMenuIdx)
-                setExpandForm({ words: (currentStory.chapters[contextMenuIdx]?.wordCount || 0) + 1000, reqs: '' })
+                setExpandForm({ words, prompt: initialPrompt })
                 setContextMenuIdx(null)
               }}
               className="w-full px-4 py-3 mb-2 rounded-xl text-left text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors flex items-center gap-2"
@@ -1227,43 +1279,29 @@ export default function Player() {
       {expandModalIdx !== null && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setExpandModalIdx(null)} />
-          <div className="relative w-full max-w-sm bg-slate-800 rounded-2xl p-5 shadow-2xl border border-slate-700/50">
+          <div className="relative w-full max-w-lg bg-slate-800 rounded-2xl p-5 shadow-2xl border border-slate-700/50 flex flex-col max-h-[80vh]">
             <h3 className="text-lg text-slate-100 font-medium mb-1">拓展生成</h3>
-            <p className="text-xs text-slate-400 mb-4">当前字数: {currentStory.chapters[expandModalIdx]?.wordCount || 0}</p>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-slate-400 block mb-1">目标字数</label>
-                <input
-                  type="number"
-                  value={expandForm.words}
-                  onChange={(e) => setExpandForm(prev => ({ ...prev, words: parseInt(e.target.value) || 0 }))}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-slate-200 outline-none focus:border-amber-500/50"
-                  placeholder="例如：2000"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-slate-400 block mb-1">额外需求</label>
-                <textarea
-                  value={expandForm.reqs}
-                  onChange={(e) => setExpandForm(prev => ({ ...prev, reqs: e.target.value }))}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-slate-200 outline-none focus:border-amber-500/50 resize-none h-24"
-                  placeholder="例如：加入更多人物对话、增加背景设定细节等"
-                />
-              </div>
-              <div className="flex gap-3 mt-2">
-                <button
-                  onClick={() => setExpandModalIdx(null)}
-                  className="flex-1 py-3 rounded-xl bg-slate-700 text-slate-300 font-medium"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleExpandSubmit}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium"
-                >
-                  开始拓展
-                </button>
-              </div>
+            <p className="text-xs text-slate-400 mb-4">当前字数: {currentStory.chapters[expandModalIdx]?.wordCount || 0}。可以直接修改下方的 Prompt。</p>
+            <div className="flex-1 min-h-0 mb-4">
+              <textarea
+                value={expandForm.prompt}
+                onChange={(e) => setExpandForm(prev => ({ ...prev, prompt: e.target.value }))}
+                className="w-full h-full min-h-[200px] bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-300 outline-none focus:border-amber-500/50 resize-none font-mono"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setExpandModalIdx(null)}
+                className="flex-1 py-3 rounded-xl bg-slate-700 text-slate-300 font-medium"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleExpandSubmit}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium"
+              >
+                开始拓展
+              </button>
             </div>
           </div>
         </div>
@@ -1336,6 +1374,38 @@ export default function Player() {
                   确定
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 重新生成 Modal */}
+      {regenerateModalIdx !== null && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setRegenerateModalIdx(null)} />
+          <div className="relative w-full max-w-lg bg-slate-800 rounded-2xl p-5 shadow-2xl border border-slate-700/50 flex flex-col max-h-[80vh]">
+            <h3 className="text-lg text-slate-100 font-medium mb-1">重新生成章节</h3>
+            <p className="text-xs text-slate-400 mb-4">您可以直接编辑下方的 Prompt 来微调生成方案</p>
+            <div className="flex-1 min-h-0 mb-4">
+              <textarea
+                value={regeneratePrompt}
+                onChange={(e) => setRegeneratePrompt(e.target.value)}
+                className="w-full h-full min-h-[200px] bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm text-slate-300 outline-none focus:border-amber-500/50 resize-none font-mono"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setRegenerateModalIdx(null)}
+                className="flex-1 py-3 rounded-xl bg-slate-700 text-slate-300 font-medium"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRegenerateSubmit}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-900 font-medium"
+              >
+                开始生成
+              </button>
             </div>
           </div>
         </div>
