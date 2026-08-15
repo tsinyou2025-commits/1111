@@ -34,6 +34,7 @@ export interface AppSettings {
   theme: 'dark' | 'light'
   fontSize: 'small' | 'medium' | 'large'
   customApiServer: string
+  apiProfiles: Record<string, { apiKey: string; model: string }>
 }
 
 interface AppState {
@@ -78,6 +79,7 @@ const defaultSettings: AppSettings = {
   theme: 'dark',
   fontSize: 'medium',
   customApiServer: '',
+  apiProfiles: {},
 }
 
 export const useAppStore = create<AppState>()(

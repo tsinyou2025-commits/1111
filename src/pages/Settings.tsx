@@ -92,11 +92,22 @@ export default function Settings() {
   const handleSelectProvider = (provider: ProviderConfig) => {
     setSelectedProvider(provider.id)
     if (provider.id !== 'custom') {
+      const profile = localSettings.apiProfiles?.[provider.id]
       setLocalSettings((prev) => ({
         ...prev,
         aiBaseUrl: provider.baseUrl,
-        model: provider.defaultModel,
+        model: profile?.model || provider.defaultModel,
+        apiKey: profile?.apiKey || '',
       }))
+    } else {
+      const profile = localSettings.apiProfiles?.['custom']
+      if (profile) {
+        setLocalSettings((prev) => ({
+          ...prev,
+          model: profile.model,
+          apiKey: profile.apiKey,
+        }))
+      }
     }
   }
 
@@ -333,7 +344,20 @@ export default function Settings() {
               <input
                 type="password"
                 value={localSettings.apiKey}
-                onChange={(e) => setLocalSettings({ ...localSettings, apiKey: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setLocalSettings((prev) => ({
+                    ...prev,
+                    apiKey: val,
+                    apiProfiles: {
+                      ...(prev.apiProfiles || {}),
+                      [selectedProvider]: {
+                        ...((prev.apiProfiles || {})[selectedProvider] || { model: prev.model || '' }),
+                        apiKey: val
+                      }
+                    }
+                  }))
+                }}
                 placeholder={providers.find((p) => p.id === selectedProvider)?.keyPlaceholder || '请输入 API Key'}
                 className="w-full px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700/50 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500/50 transition-all"
               />
@@ -345,7 +369,20 @@ export default function Settings() {
                 <input
                   type="text"
                   value={localSettings.model}
-                  onChange={(e) => setLocalSettings({ ...localSettings, model: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setLocalSettings((prev) => ({
+                      ...prev,
+                      model: val,
+                      apiProfiles: {
+                        ...(prev.apiProfiles || {}),
+                        [selectedProvider]: {
+                          ...((prev.apiProfiles || {})[selectedProvider] || { apiKey: prev.apiKey || '' }),
+                          model: val
+                        }
+                      }
+                    }))
+                  }}
                   placeholder="gpt-4o-mini"
                   className="flex-1 px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-700/50 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500/50 transition-all"
                 />
@@ -362,7 +399,19 @@ export default function Settings() {
                   {modelList.slice(0, 10).map((m) => (
                     <button
                       key={m}
-                      onClick={() => setLocalSettings({ ...localSettings, model: m })}
+                      onClick={() => {
+                        setLocalSettings(prev => ({ 
+                          ...prev, 
+                          model: m,
+                          apiProfiles: {
+                            ...(prev.apiProfiles || {}),
+                            [selectedProvider]: {
+                              ...((prev.apiProfiles || {})[selectedProvider] || { apiKey: prev.apiKey || '' }),
+                              model: m
+                            }
+                          }
+                        }))
+                      }}
                       className={cn(
                         'px-3 py-1.5 rounded-lg text-xs transition-all',
                         localSettings.model === m
