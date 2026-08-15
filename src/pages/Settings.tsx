@@ -30,11 +30,11 @@ const providers: ProviderConfig[] = [
   {
     id: 'xiaomi',
     name: '小米 MiMo',
-    baseUrl: 'https://api.xiaomi.com/v1',
+    baseUrl: 'https://api.xiaomimimo.com/v1',
     defaultModel: 'mi-mo-v1-flash',
     icon: '📱',
     color: 'from-orange-500 to-red-500',
-    keyPlaceholder: '请输入小米 API Key',
+    keyPlaceholder: 'sk-...',
   },
   {
     id: 'gemini',
