@@ -64,6 +64,8 @@ export default function Player() {
   currentStoryRef.current = currentStory
   const [scrolledAway, setScrolledAway] = useState(false)
   const needsInitialScroll = useRef(true)
+  const [miniPlayerCollapsed, setMiniPlayerCollapsed] = useState(false)
+  const miniPlayerTouchStartX = useRef<number | null>(null)
 
   const playingChapter = currentStory.chapters[currentStory.currentChapterIndex]
   const viewingChapter = currentStory.chapters[viewingChapterIndex]
@@ -484,47 +486,99 @@ export default function Player() {
   if (!isVisible) {
     if (!currentStory.id || !playingChapter) return null
     return (
-      <div className="fixed bottom-[80px] left-4 right-4 md:bottom-8 md:left-auto md:right-8 md:w-96 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-4 shadow-2xl z-50 flex items-center gap-3">
-        <div 
-          className="flex-1 min-w-0 cursor-pointer"
-          onClick={() => navigate('/player')}
-        >
-          <div className="text-xs text-amber-400 mb-1 font-medium flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-            后台播放中
+      <div 
+        className={cn(
+          "fixed z-50 transition-all duration-300 ease-out flex",
+          miniPlayerCollapsed 
+            ? "bottom-[80px] right-0 translate-x-0" 
+            : "bottom-[80px] left-4 right-4 md:bottom-8 md:left-auto md:right-8 md:w-96"
+        )}
+      >
+        {miniPlayerCollapsed ? (
+          <div 
+            onClick={() => setMiniPlayerCollapsed(false)}
+            className="bg-slate-800/95 backdrop-blur-xl border border-r-0 border-slate-700/50 rounded-l-full p-1 pl-2 shadow-2xl flex items-center gap-2 cursor-pointer active:scale-95 touch-pan-y"
+            onTouchStart={(e) => { miniPlayerTouchStartX.current = e.touches[0].clientX }}
+            onTouchMove={(e) => {
+              if (miniPlayerTouchStartX.current !== null) {
+                const diff = miniPlayerTouchStartX.current - e.touches[0].clientX
+                if (diff > 30) {
+                  setMiniPlayerCollapsed(false)
+                  miniPlayerTouchStartX.current = null
+                }
+              }
+            }}
+            onTouchEnd={() => { miniPlayerTouchStartX.current = null }}
+          >
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center relative shadow-lg">
+              {isSpeaking && !isPaused ? (
+                <div className="flex gap-0.5 items-center justify-center">
+                  <div className="w-1 h-3 bg-slate-900 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-1 h-4 bg-slate-900 rounded-full animate-bounce" style={{ animationDelay: '100ms' }} />
+                  <div className="w-1 h-3 bg-slate-900 rounded-full animate-bounce" style={{ animationDelay: '200ms' }} />
+                </div>
+              ) : (
+                <Play size={16} fill="currentColor" className="text-slate-900 ml-0.5" />
+              )}
+            </div>
           </div>
-          <div className="text-sm text-slate-200 font-medium truncate">
-            {playingChapter.title}
+        ) : (
+          <div 
+            className="flex-1 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-4 shadow-2xl flex items-center gap-3 touch-pan-y"
+            onTouchStart={(e) => { miniPlayerTouchStartX.current = e.touches[0].clientX }}
+            onTouchMove={(e) => {
+              if (miniPlayerTouchStartX.current !== null) {
+                const diff = e.touches[0].clientX - miniPlayerTouchStartX.current
+                if (diff > 50) {
+                  setMiniPlayerCollapsed(true)
+                  miniPlayerTouchStartX.current = null
+                }
+              }
+            }}
+            onTouchEnd={() => { miniPlayerTouchStartX.current = null }}
+          >
+            <div 
+              className="flex-1 min-w-0 cursor-pointer"
+              onClick={() => navigate('/player')}
+            >
+              <div className="text-xs text-amber-400 mb-1 font-medium flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                后台播放中 <span className="text-slate-500 ml-1 scale-90 font-normal">({(isSpeaking && !isPaused) ? '右滑可收起' : '右滑可收起'})</span>
+              </div>
+              <div className="text-sm text-slate-200 font-medium truncate">
+                {playingChapter.title}
+              </div>
+              <div className="text-xs text-slate-500 truncate mt-0.5">
+                {currentStory.title || currentStory.theme}
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                const currentIdx = speedOptions.indexOf(settings.speechRate)
+                const nextIdx = (currentIdx + 1) % speedOptions.length
+                const newRate = speedOptions[nextIdx]
+                setLocalRate(newRate)
+                useAppStore.getState().setSettings({ speechRate: newRate })
+              }}
+              className="h-9 px-2.5 flex-shrink-0 rounded-lg bg-slate-700/80 text-slate-300 text-xs font-bold flex items-center justify-center active:scale-95 transition-all"
+            >
+              {settings.speechRate}x
+            </button>
+            <button
+              onClick={handlePlayPause}
+              disabled={playingChapter?.status !== 'completed' || !playingChapter?.content}
+              className="w-11 h-11 flex-shrink-0 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-900 flex items-center justify-center shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+            >
+              {isGenerating ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : isSpeaking && !isPaused ? (
+                <Pause size={18} fill="currentColor" />
+              ) : (
+                <Play size={18} fill="currentColor" className="ml-0.5" />
+              )}
+            </button>
           </div>
-          <div className="text-xs text-slate-500 truncate mt-0.5">
-            {currentStory.title || currentStory.theme}
-          </div>
-        </div>
-        <button
-          onClick={() => {
-            const currentIdx = speedOptions.indexOf(settings.speechRate)
-            const nextIdx = (currentIdx + 1) % speedOptions.length
-            const newRate = speedOptions[nextIdx]
-            setLocalRate(newRate)
-            useAppStore.getState().setSettings({ speechRate: newRate })
-          }}
-          className="h-9 px-2.5 flex-shrink-0 rounded-lg bg-slate-700/80 text-slate-300 text-xs font-bold flex items-center justify-center active:scale-95 transition-all"
-        >
-          {settings.speechRate}x
-        </button>
-        <button
-          onClick={handlePlayPause}
-          disabled={playingChapter?.status !== 'completed' || !playingChapter?.content}
-          className="w-11 h-11 flex-shrink-0 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-900 flex items-center justify-center shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
-        >
-          {isGenerating ? (
-            <Loader2 size={18} className="animate-spin" />
-          ) : isSpeaking && !isPaused ? (
-            <Pause size={18} fill="currentColor" />
-          ) : (
-            <Play size={18} fill="currentColor" className="ml-0.5" />
-          )}
-        </button>
+        )}
       </div>
     )
   }
