@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Moon, Sparkles, Clock, Play, ChevronRight, Plus, X, Edit3, Trash2, RefreshCw } from 'lucide-react'
+import { Moon, Sparkles, Clock, Play, ChevronRight, Plus, X, Edit3, Trash2, RefreshCw, Upload } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useStoryGenerator } from '@/hooks/useStoryGenerator'
 import { cn } from '@/lib/utils'
@@ -139,6 +139,123 @@ export default function Home() {
     if (success) {
       navigate('/player')
     }
+  }
+
+  const handleImportLocalFile = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.txt,.md'
+    input.onchange = (e: any) => {
+      const file = e.target.files[0]
+      if (!file) return
+      
+      const reader = new FileReader()
+      reader.onload = (ev: any) => {
+        const text = ev.target.result
+        parseLocalDocument(file.name.replace(/\.[^/.]+$/, ""), text)
+      }
+      reader.readAsText(file)
+    }
+    input.click()
+  }
+
+  const parseLocalDocument = (title: string, text: string) => {
+    // Basic heuristics to split into chapters
+    // 匹配章节如：第一章、第12回、Chapter 1、# 标题
+    const chapterRegex = /^(第[一二三四五六七八九十百千0-9]+[章回节篇部段]\s*.*|Chapter\s*\d+\s*.*|#\s+.*)$/gm
+    
+    let matches = []
+    let match
+    while ((match = chapterRegex.exec(text)) !== null) {
+      matches.push({ index: match.index, title: match[1].trim() })
+    }
+    
+    const chapters: any[] = []
+    
+    if (matches.length > 0) {
+      for (let i = 0; i < matches.length; i++) {
+        const start = matches[i].index + matches[i].title.length
+        const end = i < matches.length - 1 ? matches[i+1].index : text.length
+        const content = text.slice(start, end).trim()
+        
+        chapters.push({
+          index: chapters.length,
+          title: matches[i].title.replace(/^#\s*/, ''),
+          summary: '',
+          content: content,
+          wordCount: content.length,
+          status: 'completed'
+        })
+      }
+      // What about text before the first chapter?
+      if (matches[0].index > 0) {
+        const preContent = text.slice(0, matches[0].index).trim()
+        if (preContent.length > 50) {
+          chapters.unshift({
+            index: 0,
+            title: '引言 / 前言',
+            summary: '',
+            content: preContent,
+            wordCount: preContent.length,
+            status: 'completed'
+          })
+          chapters.forEach((c, i) => c.index = i)
+        }
+      }
+    } else {
+      // Chunk by roughly 2500 chars roughly, respecting paragraphs
+      const paragraphs = text.split(/\n\n+/)
+      let currentContent = ''
+      let chunkIndex = 0
+      for (const p of paragraphs) {
+        currentContent += p + '\n\n'
+        if (currentContent.length > 2500) {
+          chapters.push({
+            index: chunkIndex,
+            title: `第 ${chunkIndex + 1} 部分`,
+            summary: '',
+            content: currentContent.trim(),
+            wordCount: currentContent.trim().length,
+            status: 'completed'
+          })
+          chunkIndex++
+          currentContent = ''
+        }
+      }
+      if (currentContent.trim().length > 0) {
+        chapters.push({
+          index: chunkIndex,
+          title: `第 ${chunkIndex + 1} 部分`,
+          summary: '',
+          content: currentContent.trim(),
+          wordCount: currentContent.trim().length,
+          status: 'completed'
+        })
+      }
+    }
+    
+    if (chapters.length === 0) {
+      alert('文件内容为空！')
+      return
+    }
+    
+    setCurrentStory({
+      id: Date.now().toString(),
+      title: title,
+      theme: title,
+      style: '本地导入',
+      customStylePrompt: '',
+      targetHours: chapters.length * 0.1,
+      currentChapterIndex: 0,
+      isGenerating: false,
+      isPlaying: false,
+      totalWords: chapters.reduce((sum, c) => sum + c.wordCount, 0),
+      generationQueue: [],
+      isBatchGenerating: false,
+    })
+    
+    setChapters(chapters)
+    navigate('/player')
   }
 
   const openEditor = (styleToEdit?: CustomStyle) => {
@@ -396,24 +513,34 @@ export default function Home() {
         </div>
 
         {/* 开始按钮 */}
-        <button
-          onClick={handleStart}
-          disabled={isGeneratingOutline}
-          className="w-full py-5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-900 font-bold text-lg shadow-xl shadow-amber-500/20 hover:shadow-amber-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-        >
-          {isGeneratingOutline ? (
-            <>
-              <Sparkles size={24} className="animate-spin" />
-              <span>正在生成目录...</span>
-            </>
-          ) : (
-            <>
-              <Play size={24} fill="currentColor" />
-              <span>开始生成故事</span>
-              <ChevronRight size={20} />
-            </>
-          )}
-        </button>
+        <div className="flex flex-col gap-3">
+          <button
+            onClick={handleStart}
+            disabled={isGeneratingOutline}
+            className="w-full py-5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-900 font-bold text-lg shadow-xl shadow-amber-500/20 hover:shadow-amber-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+          >
+            {isGeneratingOutline ? (
+              <>
+                <Sparkles size={24} className="animate-spin" />
+                <span>正在生成目录...</span>
+              </>
+            ) : (
+              <>
+                <Play size={24} fill="currentColor" />
+                <span>开始生成内容</span>
+                <ChevronRight size={20} />
+              </>
+            )}
+          </button>
+          
+          <button
+            onClick={handleImportLocalFile}
+            className="w-full py-4 rounded-2xl bg-slate-800/80 border border-slate-700/50 text-slate-300 font-medium hover:bg-slate-700/80 transition-colors flex items-center justify-center gap-2"
+          >
+            <Upload size={18} />
+            <span>导入本地 TXT/MD 文本朗读</span>
+          </button>
+        </div>
 
         {error && (
           <p className="text-center text-red-400 text-sm mt-3">{error}</p>
