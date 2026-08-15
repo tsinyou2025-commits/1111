@@ -689,7 +689,9 @@ export default function Player() {
                       </p>
                     )}
                     {chapter.status === 'generating' && (
-                      <p className="text-xs text-amber-500 mt-1">生成中...</p>
+                      <p className="text-xs text-amber-500 mt-1">
+                        {chapter.wordCount > 0 ? `生成中... ${chapter.wordCount} 字` : '生成中...'}
+                      </p>
                     )}
                   </div>
                 </button>

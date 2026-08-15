@@ -134,14 +134,20 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
           signal: controller.signal,
         })
 
+        let lastUpdateTime = 0
+
         eventSource.addEventListener('text', (event: any) => {
           try {
             const data = JSON.parse(event.data)
             fullContent += data.content
-            updateChapter(chapterIndex, {
-              content: fullContent,
-              wordCount: fullContent.length,
-            })
+            const now = Date.now()
+            if (now - lastUpdateTime > 200) {
+              updateChapter(chapterIndex, {
+                content: fullContent,
+                wordCount: fullContent.length,
+              })
+              lastUpdateTime = now
+            }
           } catch (e) {
             console.error('Parse text error:', e)
           }
@@ -158,7 +164,11 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
         })
 
         eventSource.addEventListener('text_done', (event: any) => {
-          updateChapter(chapterIndex, { status: 'completed' })
+          updateChapter(chapterIndex, { 
+            content: fullContent,
+            wordCount: fullContent.length,
+            status: 'completed' 
+          })
         })
 
         eventSource.addEventListener('done', (event: any) => {
