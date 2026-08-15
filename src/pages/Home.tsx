@@ -216,7 +216,7 @@ export default function Home() {
           {/* 版本/热更新卡片 */}
           <div className="inline-flex flex-col items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-800/50 border border-slate-700/50 text-xs text-slate-500">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-slate-300">v1.0.15</span>
+              <span className="font-mono text-slate-300">v2.0.2</span>
               <span className="w-1 h-1 rounded-full bg-slate-600" />
               <span className="font-mono text-slate-500">{localSha}</span>
               {versionInfo.isChecking && (
