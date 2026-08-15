@@ -35,6 +35,9 @@ router.post('/generate', async (req: Request, res: Response) => {
         sendSSE('summary', { content: summary, chapterIndex: req.body.chapterIndex })
       },
       (totalWords) => {
+        sendSSE('text_done', { chapterIndex: req.body.chapterIndex, totalWords })
+      },
+      (totalWords) => {
         sendSSE('done', { chapterIndex: req.body.chapterIndex, totalWords })
         ended = true
         res.end()

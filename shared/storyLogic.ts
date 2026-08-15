@@ -168,6 +168,7 @@ export async function generateChapterStream(
   body: GenerateRequest,
   onText: (content: string) => void,
   onSummary: (summary: string) => void,
+  onTextDone: (totalWords: number) => void,
   onDone: (totalWords: number) => void,
   onError: (error: string) => void
 ): Promise<void> {
@@ -243,6 +244,9 @@ export async function generateChapterStream(
       }
     }
 
+    // 先发送正文完成事件，让前端可以立刻开始朗读
+    onTextDone(fullContent.length)
+
     // 生成章节摘要
     try {
       const summaryPrompt = buildSummaryPrompt(fullContent, body.theme)
@@ -265,10 +269,15 @@ export async function generateChapterStream(
         const summary = summaryData.choices?.[0]?.message?.content?.trim() || ''
         if (summary) {
           onSummary(summary)
+        } else {
+          onSummary(fullContent.slice(-300))
         }
+      } else {
+        onSummary(fullContent.slice(-300))
       }
     } catch {
-      // 摘要生成失败不影响主流程
+      // 摘要生成失败不影响主流程，直接回退到最后 300 字
+      onSummary(fullContent.slice(-300))
     }
 
     onDone(fullContent.length)

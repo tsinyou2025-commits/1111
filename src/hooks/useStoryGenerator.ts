@@ -157,10 +157,13 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
           }
         })
 
+        eventSource.addEventListener('text_done', (event: any) => {
+          updateChapter(chapterIndex, { status: 'completed' })
+        })
+
         eventSource.addEventListener('done', (event: any) => {
           try {
             const data = JSON.parse(event.data)
-            updateChapter(chapterIndex, { status: 'completed' })
             eventSource.close()
             resolve({
               content: fullContent,
@@ -168,7 +171,6 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
               wordCount: data.totalWords || fullContent.length,
             })
           } catch (e) {
-            updateChapter(chapterIndex, { status: 'completed' })
             eventSource.close()
             resolve({ content: fullContent, summary, wordCount: fullContent.length })
           }
@@ -190,7 +192,6 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
         eventSource.onerror = () => {
           eventSource.close()
           if (fullContent.length > 100) {
-            updateChapter(chapterIndex, { status: 'completed' })
             resolve({ content: fullContent, summary, wordCount: fullContent.length })
           } else {
             updateChapter(chapterIndex, { status: 'pending' })
@@ -208,7 +209,7 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
         setError('请先在设置中配置 API Key')
         return
       }
-      if (isGenerating) return
+      if (currentStory.isGenerating) return
       if (currentStory.chapters[chapterIndex]?.status === 'completed') return
       if (currentStory.chapters[chapterIndex]?.status === 'generating') return
 
@@ -225,7 +226,7 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
         setCurrentStory({ isGenerating: false })
       }
     },
-    [settings.apiKey, isGenerating, currentStory.chapters, generateSingleChapter, setCurrentStory]
+    [settings.apiKey, currentStory.isGenerating, currentStory.chapters, generateSingleChapter, setCurrentStory]
   )
 
   const stopGenerating = useCallback(() => {

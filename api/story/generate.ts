@@ -54,6 +54,7 @@ function buildSummaryPrompt(chapterContent: string, theme: string): string {
   body: any,
   onText: (content: string) => void,
   onSummary: (summary: string) => void,
+  onTextDone: (totalWords: number) => void,
   onDone: (totalWords: number) => void,
   onError: (error: string) => void
 ): Promise<void> {
@@ -128,6 +129,9 @@ function buildSummaryPrompt(chapterContent: string, theme: string): string {
       }
     }
 
+    // 先发送正文完成事件，让前端可以立刻开始朗读
+    onTextDone(fullContent.length)
+
     // 生成章节摘要
     try {
       const summaryPrompt = buildSummaryPrompt(fullContent, body.theme)
@@ -150,10 +154,15 @@ function buildSummaryPrompt(chapterContent: string, theme: string): string {
         const summary = summaryData.choices?.[0]?.message?.content?.trim() || ''
         if (summary) {
           onSummary(summary)
+        } else {
+          onSummary(fullContent.slice(-300))
         }
+      } else {
+        onSummary(fullContent.slice(-300))
       }
     } catch (e) {
-      // 摘要生成失败不影响主流程
+      // 摘要生成失败不影响主流程，直接回退到最后 300 字
+      onSummary(fullContent.slice(-300))
     }
 
     onDone(fullContent.length)
@@ -197,6 +206,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       (summary) => {
         sendSSE('summary', { content: summary, chapterIndex: req.body.chapterIndex })
+      },
+      (totalWords) => {
+        sendSSE('text_done', { chapterIndex: req.body.chapterIndex, totalWords })
       },
       (totalWords) => {
         sendSSE('done', { chapterIndex: req.body.chapterIndex, totalWords })
