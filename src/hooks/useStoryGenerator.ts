@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
 import { useAppStore, StoryChapter } from '@/store/appStore'
-import { generateOutline as logicGenerateOutline, generateChapterStream } from '../../shared/storyLogic'
+import { generateOutline as logicGenerateOutline, generateChapterStream, generateGenericStream } from '../../shared/storyLogic'
 
 interface UseStoryGeneratorReturn {
   isGenerating: boolean
@@ -11,6 +11,8 @@ interface UseStoryGeneratorReturn {
   stopGenerating: () => void
   startBatchGeneration: (startIndex: number, count?: number) => void
   stopBatchGeneration: () => void
+  expandChapter: (chapterIndex: number, currentContent: string, targetWords: number, requirements: string) => Promise<boolean>
+  rewriteParagraph: (chapterIndex: number, paragraphIndex: number, originalText: string, requirements: string) => Promise<boolean>
 }
 
 export function useStoryGenerator(): UseStoryGeneratorReturn {
@@ -255,6 +257,116 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
     }
   }, [currentStory.isBatchGenerating, currentStory.isGenerating, currentStory.generationQueue, generateChapter, setCurrentStory])
 
+  const expandChapter = useCallback(async (chapterIndex: number, currentContent: string, targetWords: number, requirements: string): Promise<boolean> => {
+    if (!settings.apiKey) {
+      setError('请先在设置中配置 API Key')
+      return false
+    }
+
+    const chapter = useAppStore.getState().currentStory.chapters[chapterIndex]
+    if (!chapter) return false
+
+    setIsGenerating(true)
+    setError(null)
+    updateChapter(chapterIndex, { status: 'generating' })
+    setCurrentStory({ isGenerating: true })
+
+    const prompt = `请你将以下章节进行扩写，目标字数大约在 ${targetWords} 字左右。
+用户的额外要求是：${requirements || '无'}
+
+现有章节标题：${chapter.title}
+现有章节内容：
+${currentContent}
+
+请直接输出扩写后的完整章节内容，不要包含标题，不要包含任何多余的解释。`
+
+    return new Promise((resolve) => {
+      let expandedContent = ''
+      
+      generateGenericStream(
+        prompt,
+        { aiBaseUrl: settings.aiBaseUrl, apiKey: settings.apiKey, model: settings.model } as any,
+        (content) => {
+          expandedContent += content
+          updateChapter(chapterIndex, { content: expandedContent, wordCount: expandedContent.length })
+        },
+        (finalContent) => {
+          updateChapter(chapterIndex, { content: finalContent, wordCount: finalContent.length, status: 'completed' })
+          setIsGenerating(false)
+          setCurrentStory({ isGenerating: false })
+          resolve(true)
+        },
+        (err) => {
+          setError(err)
+          updateChapter(chapterIndex, { status: 'completed' }) // Revert status
+          setIsGenerating(false)
+          setCurrentStory({ isGenerating: false })
+          resolve(false)
+        }
+      )
+    })
+  }, [settings.apiKey, settings.aiBaseUrl, settings.model, updateChapter, setCurrentStory])
+
+  const rewriteParagraph = useCallback(async (chapterIndex: number, paragraphIndex: number, originalText: string, requirements: string): Promise<boolean> => {
+    if (!settings.apiKey) {
+      setError('请先在设置中配置 API Key')
+      return false
+    }
+
+    const chapter = useAppStore.getState().currentStory.chapters[chapterIndex]
+    if (!chapter) return false
+
+    setIsGenerating(true)
+    setError(null)
+    setCurrentStory({ isGenerating: true })
+
+    const prompt = `请你对下面这段话进行重写（精修/修改）。
+用户的要求是：${requirements || '优化文笔'}
+
+【原文如下】：
+${originalText}
+
+请直接输出重写后的内容，不要输出任何多余的解释，不要带引号。`
+
+    return new Promise((resolve) => {
+      let rewrittenText = ''
+      
+      generateGenericStream(
+        prompt,
+        { aiBaseUrl: settings.aiBaseUrl, apiKey: settings.apiKey, model: settings.model } as any,
+        (content) => {
+          // 在重写过程中，为了更好的体验可以不实时替换段落，或者实时替换
+          // 我们选择实时替换：每次更新都替换掉那个特定的段落
+          rewrittenText += content
+          
+          const paragraphs = chapter.content.split(/\n\n+/)
+          if (paragraphs[paragraphIndex]) {
+            paragraphs[paragraphIndex] = rewrittenText
+            const newChapterContent = paragraphs.join('\n\n')
+            updateChapter(chapterIndex, { content: newChapterContent, wordCount: newChapterContent.length })
+          }
+        },
+        (finalContent) => {
+          const paragraphs = chapter.content.split(/\n\n+/)
+          if (paragraphs[paragraphIndex]) {
+            paragraphs[paragraphIndex] = finalContent
+            const newChapterContent = paragraphs.join('\n\n')
+            updateChapter(chapterIndex, { content: newChapterContent, wordCount: newChapterContent.length })
+          }
+          setIsGenerating(false)
+          setCurrentStory({ isGenerating: false })
+          resolve(true)
+        },
+        (err) => {
+          setError(err)
+          setIsGenerating(false)
+          setCurrentStory({ isGenerating: false })
+          resolve(false)
+        }
+      )
+    })
+  }, [settings.apiKey, settings.aiBaseUrl, settings.model, updateChapter, setCurrentStory])
+
   return {
     isGenerating,
     isGeneratingOutline,
@@ -264,5 +376,7 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
     stopGenerating,
     startBatchGeneration,
     stopBatchGeneration,
+    expandChapter,
+    rewriteParagraph,
   }
 }

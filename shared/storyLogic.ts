@@ -305,3 +305,85 @@ export async function getModels(baseUrl: string, apiKey: string): Promise<any> {
 
   return await response.json()
 }
+
+export async function generateGenericStream(
+  prompt: string,
+  body: GenerateRequest,
+  onText: (content: string) => void,
+  onDone: (fullContent: string) => void,
+  onError: (error: string) => void
+): Promise<void> {
+  try {
+    if (!body.aiBaseUrl || !body.apiKey || !body.model) {
+      onError('缺少必要参数')
+      return
+    }
+    
+    const baseUrl = body.aiBaseUrl.replace(/\/$/, '')
+    const apiUrl = `${baseUrl}/chat/completions`
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${body.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: body.model,
+        messages: [
+          { role: 'system', content: '你是一位专业的内容创作者，能够精准理解并执行用户的改写或扩写需求。绝不输出多余的解释或客套话，直接输出正文。' },
+          { role: 'user', content: prompt }
+        ],
+        stream: true,
+        temperature: 0.8,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      onError(`AI接口错误: ${response.status} ${errorText.slice(0, 200)}`)
+      return
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      onError('无法读取响应流')
+      return
+    }
+
+    const decoder = new TextDecoder()
+    let fullContent = ''
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data:')) continue
+        
+        const dataStr = trimmed.slice(5).trim()
+        if (dataStr === '[DONE]') continue
+
+        try {
+          const data = JSON.parse(dataStr)
+          const content = data.choices?.[0]?.delta?.content
+          if (content) {
+            fullContent += content
+            onText(content)
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    onDone(fullContent)
+  } catch (error) {
+    onError(error instanceof Error ? error.message : '未知错误')
+  }
+}

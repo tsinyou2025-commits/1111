@@ -17,6 +17,8 @@ import {
   Circle,
   RefreshCw,
   Download,
+  Edit3,
+  PlusCircle,
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useSpeech } from '@/hooks/useSpeech'
@@ -37,7 +39,7 @@ export default function Player() {
   const isVisible = location.pathname === '/player'
   const { currentStory, settings, addToHistory, setCurrentStory, updateChapter } = useAppStore()
   const { isSpeaking, isPaused, speak, pause, resume, stop, currentSentence, currentSentenceIndex: speechSentenceIndex, availableVoices, setOnChapterEnd } = useSpeech()
-  const { isGenerating, isGeneratingOutline, error, generateChapter, stopGenerating, startBatchGeneration, stopBatchGeneration } = useStoryGenerator()
+  const { isGenerating, isGeneratingOutline, error, generateChapter, stopGenerating, startBatchGeneration, stopBatchGeneration, expandChapter, rewriteParagraph } = useStoryGenerator()
   const generateChapterRef = useRef(generateChapter)
   generateChapterRef.current = generateChapter
 
@@ -67,6 +69,15 @@ export default function Player() {
   const needsInitialScroll = useRef(true)
   const [miniPlayerCollapsed, setMiniPlayerCollapsed] = useState(false)
   const miniPlayerTouchStartX = useRef<number | null>(null)
+  
+  // 新增功能的 state
+  const [expandModalIdx, setExpandModalIdx] = useState<number | null>(null)
+  const [expandForm, setExpandForm] = useState({ words: 1000, reqs: '' })
+  const [renameModalIdx, setRenameModalIdx] = useState<number | null>(null)
+  const [renameFormTitle, setRenameFormTitle] = useState('')
+  const [rewriteModal, setRewriteModal] = useState<{ chapterIdx: number, pIdx: number, text: string } | null>(null)
+  const [rewriteReqs, setRewriteReqs] = useState('')
+  const paragraphLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const playingChapter = currentStory.chapters[currentStory.currentChapterIndex]
   const viewingChapter = currentStory.chapters[viewingChapterIndex]
@@ -461,6 +472,46 @@ export default function Player() {
     }
   }
 
+  const handleParagraphPointerDown = (chapterIdx: number, pIdx: number, text: string, e: React.PointerEvent) => {
+    paragraphLongPressTimerRef.current = setTimeout(() => {
+      setRewriteModal({ chapterIdx, pIdx, text })
+      setRewriteReqs('')
+      paragraphLongPressTimerRef.current = null
+    }, 500)
+  }
+
+  const handleParagraphPointerUp = () => {
+    if (paragraphLongPressTimerRef.current) {
+      clearTimeout(paragraphLongPressTimerRef.current)
+      paragraphLongPressTimerRef.current = null
+    }
+  }
+
+  const handleExpandSubmit = async () => {
+    if (expandModalIdx === null) return
+    const chapter = currentStory.chapters[expandModalIdx]
+    const content = chapter.content
+    setExpandModalIdx(null)
+    setContextMenuIdx(null)
+    await expandChapter(expandModalIdx, content, expandForm.words, expandForm.reqs)
+  }
+
+  const handleRewriteSubmit = async () => {
+    if (!rewriteModal) return
+    const { chapterIdx, pIdx, text } = rewriteModal
+    setRewriteModal(null)
+    await rewriteParagraph(chapterIdx, pIdx, text, rewriteReqs)
+  }
+
+  const handleRenameSubmit = () => {
+    if (renameModalIdx === null) return
+    if (renameFormTitle.trim()) {
+      updateChapter(renameModalIdx, { title: renameFormTitle.trim() })
+    }
+    setRenameModalIdx(null)
+    setContextMenuIdx(null)
+  }
+
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600)
     const m = Math.floor((seconds % 3600) / 60)
@@ -807,7 +858,13 @@ export default function Player() {
                             globalStart += paragraphsAndSentences[i].sentences.length
                           }
                           return (
-                            <p key={pIdx} style={{ textIndent: '2em' }}>
+                            <p 
+                              key={pIdx} 
+                              className="mb-8 leading-relaxed tracking-wide min-h-[1.5em] touch-action-pan-y"
+                              onPointerDown={(e) => handleParagraphPointerDown(viewingChapterIndex, pIdx, para.text, e)}
+                              onPointerUp={handleParagraphPointerUp}
+                              onPointerCancel={handleParagraphPointerUp}
+                            >
                               {para.sentences.map((s, sIdx) => {
                                 const globalIdx = globalStart + sIdx
                                 return (
@@ -1128,6 +1185,28 @@ export default function Player() {
               {currentStory.chapters[contextMenuIdx]?.title || '章节'}
             </p>
             <button
+              onClick={() => {
+                setRenameModalIdx(contextMenuIdx)
+                setRenameFormTitle(currentStory.chapters[contextMenuIdx]?.title || '')
+                setContextMenuIdx(null)
+              }}
+              className="w-full px-4 py-3 mb-2 rounded-xl text-left text-slate-200 bg-slate-700/50 hover:bg-slate-700 transition-colors flex items-center gap-2"
+            >
+              <Edit3 size={16} />
+              重命名
+            </button>
+            <button
+              onClick={() => {
+                setExpandModalIdx(contextMenuIdx)
+                setExpandForm({ words: (currentStory.chapters[contextMenuIdx]?.wordCount || 0) + 1000, reqs: '' })
+                setContextMenuIdx(null)
+              }}
+              className="w-full px-4 py-3 mb-2 rounded-xl text-left text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors flex items-center gap-2"
+            >
+              <PlusCircle size={16} />
+              拓展生成
+            </button>
+            <button
               onClick={() => handleRegenerateChapter(contextMenuIdx)}
               className="w-full px-4 py-3 rounded-xl text-left text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 transition-colors flex items-center gap-2"
             >
@@ -1140,6 +1219,124 @@ export default function Player() {
             >
               取消
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 拓展生成 Modal */}
+      {expandModalIdx !== null && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setExpandModalIdx(null)} />
+          <div className="relative w-full max-w-sm bg-slate-800 rounded-2xl p-5 shadow-2xl border border-slate-700/50">
+            <h3 className="text-lg text-slate-100 font-medium mb-1">拓展生成</h3>
+            <p className="text-xs text-slate-400 mb-4">当前字数: {currentStory.chapters[expandModalIdx]?.wordCount || 0}</p>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-slate-400 block mb-1">目标字数</label>
+                <input
+                  type="number"
+                  value={expandForm.words}
+                  onChange={(e) => setExpandForm(prev => ({ ...prev, words: parseInt(e.target.value) || 0 }))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-slate-200 outline-none focus:border-amber-500/50"
+                  placeholder="例如：2000"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-slate-400 block mb-1">额外需求</label>
+                <textarea
+                  value={expandForm.reqs}
+                  onChange={(e) => setExpandForm(prev => ({ ...prev, reqs: e.target.value }))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-slate-200 outline-none focus:border-amber-500/50 resize-none h-24"
+                  placeholder="例如：加入更多人物对话、增加背景设定细节等"
+                />
+              </div>
+              <div className="flex gap-3 mt-2">
+                <button
+                  onClick={() => setExpandModalIdx(null)}
+                  className="flex-1 py-3 rounded-xl bg-slate-700 text-slate-300 font-medium"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleExpandSubmit}
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium"
+                >
+                  开始拓展
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 重写段落 Modal */}
+      {rewriteModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setRewriteModal(null)} />
+          <div className="relative w-full max-w-sm bg-slate-800 rounded-2xl p-5 shadow-2xl border border-slate-700/50">
+            <h3 className="text-lg text-slate-100 font-medium mb-4">重写段落</h3>
+            <div className="bg-slate-900/50 p-3 rounded-xl mb-4 max-h-32 overflow-y-auto">
+              <p className="text-xs text-slate-400 leading-relaxed">{rewriteModal.text}</p>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-slate-400 block mb-1">重写需求</label>
+                <textarea
+                  value={rewriteReqs}
+                  onChange={(e) => setRewriteReqs(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-slate-200 outline-none focus:border-amber-500/50 resize-none h-24"
+                  placeholder="例如：写得更有文采一点、改成搞笑风格、缩写成一句话"
+                />
+              </div>
+              <div className="flex gap-3 mt-2">
+                <button
+                  onClick={() => setRewriteModal(null)}
+                  className="flex-1 py-3 rounded-xl bg-slate-700 text-slate-300 font-medium"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleRewriteSubmit}
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium"
+                >
+                  开始重写
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 重命名章节 Modal */}
+      {renameModalIdx !== null && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setRenameModalIdx(null)} />
+          <div className="relative w-full max-w-sm bg-slate-800 rounded-2xl p-5 shadow-2xl border border-slate-700/50">
+            <h3 className="text-lg text-slate-100 font-medium mb-4">重命名章节</h3>
+            <div className="space-y-4">
+              <input
+                type="text"
+                value={renameFormTitle}
+                onChange={(e) => setRenameFormTitle(e.target.value)}
+                autoFocus
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-slate-200 outline-none focus:border-amber-500/50"
+                placeholder="输入新的章节名称"
+              />
+              <div className="flex gap-3 mt-2">
+                <button
+                  onClick={() => setRenameModalIdx(null)}
+                  className="flex-1 py-3 rounded-xl bg-slate-700 text-slate-300 font-medium"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleRenameSubmit}
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-900 font-medium"
+                >
+                  确定
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
