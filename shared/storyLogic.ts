@@ -41,20 +41,21 @@ export function buildOutlinePrompt(req: OutlineRequest): string {
   const styleDesc = req.customStylePrompt || stylePrompts[req.style] || '叙事风格'
   const totalChapters = Math.max(8, Math.ceil(req.targetHours * 6))
 
-  return `请为一个关于"${req.theme}"的长篇故事设计完整的章节目录。
+  return `请为一个关于"${req.theme}"的长篇连载内容设计完整的章节（或模块）目录。
 
-风格要求：${styleDesc}
+风格与体裁要求：${styleDesc}
+(请严格根据上述要求决定这是一部小说、散文、科普讲解，还是一份严谨的工程/学术文档。绝对不要在非故事体裁中强加小说情节。)
 
-整体时长：${req.targetHours}小时，共 ${totalChapters} 章
+整体篇幅预估：对应 ${req.targetHours} 小时的阅读/朗读量，共 ${totalChapters} 个章节/模块。
 
-请设计 ${totalChapters} 个章节，每章约 ${Math.floor((req.targetHours * 60) / totalChapters)} 分钟朗读量。
+请设计 ${totalChapters} 个章节/部分，每章/部分约 ${Math.floor((req.targetHours * 60) / totalChapters)} 分钟朗读量。
 
 要求：
-1. 每章有一个简短有力的标题
-2. 每章有1-2句话的内容简介，说明本章主要讲什么
-3. 整体结构要有起承转合，层层递进
-4. 章节之间要有逻辑关联，形成完整的叙事弧光
-5. 严格遵循指定的风格要求进行架构设计，不要偏离风格基调
+1. 每章（模块）有一个简明扼要的标题
+2. 每章（模块）有1-2句话的内容简介，说明本部分主要阐述/讲述什么
+3. 整体结构要符合其体裁的逻辑关系（故事则需起承转合，文档则需总分总/递进等）
+4. 章节之间要有合理的连贯性
+5. 必须极其严格地遵循指定的【风格与体裁要求】，如果要求是严肃文档，绝对不能写成小说。
 
 请直接返回JSON格式，不要有任何额外说明，格式如下：
 {
@@ -70,31 +71,31 @@ export function buildChapterPrompt(req: GenerateRequest): string {
   const styleDesc = req.customStylePrompt || stylePrompts[req.style] || '叙事风格'
   const wordsPerChapter = Math.floor((req.targetHours * 60 * 200) / Math.max(1, req.totalChapters))
   
-  let prompt = `请用${styleDesc}，创作一个关于"${req.theme}"的长篇故事的第 ${req.chapterIndex + 1} 章${req.chapterTitle ? `——《${req.chapterTitle}》` : ''}。
+  let prompt = `请严格遵循指定的体裁和风格【${styleDesc}】，为主题为"${req.theme}"的长篇连载内容撰写第 ${req.chapterIndex + 1} 章/部分${req.chapterTitle ? `——《${req.chapterTitle}》` : ''}。
 
-本章是全书中的第 ${req.chapterIndex + 1} / ${req.totalChapters} 章。
+本部分是全局的第 ${req.chapterIndex + 1} / ${req.totalChapters} 部分。
 
 要求：
-1. 本章大约 ${wordsPerChapter} 字左右，内容要充实，细节丰富
-2. 必须极其严格地遵守给定的【风格要求】（这是最重要的指令）
-3. 拒绝无意义的废话和凑字数的描写，直接切入正题
-4. 如果风格要求中包含清晰的结构（如小标题、列表等），请务必照做
-5. 承上启下要自然，保持整体基调的统一
-6. 必须合理分段，每个自然段之间用两个换行符（\n\n）分隔。不要把所有内容写成一整块，要根据内容逻辑自然分段
-7. 直接输出内容，不要有任何额外的开场白、说明或标题`
+1. 本章大约 ${wordsPerChapter} 字左右，内容要充实，细节丰富。
+2. 必须极其严格地遵守给定的【风格与体裁要求】（这是最重要的指令）。如果要求是严谨的工程文档、方案或报告，请直接输出专业严谨的文档正文，【绝对不要】虚构任何人物、对话或小说情节。
+3. 拒绝无意义的废话和凑字数的描写，直接切入正题。
+4. 如果风格要求中包含清晰的结构（如小标题、列表等），请务必照做。
+5. 承上启下要自然，保持整体基调的统一。
+6. 必须合理分段，每个自然段之间用两个换行符（\\n\\n）分隔。
+7. 直接输出内容，不要有任何额外的开场白、说明或标题。`
 
   if (req.previousSummary) {
-    prompt += `\n\n之前章节的概要：${req.previousSummary}`
+    prompt += `\n\n前文概要：${req.previousSummary}`
   }
   if (req.previousEnding) {
-    prompt += `\n\n上一章的结尾是：${req.previousEnding}`
+    prompt += `\n\n上一部分的结尾是：${req.previousEnding}`
   }
   if (req.chapterIndex === 0) {
-    prompt += `\n\n这是故事的第一章，请为故事设定一个引人入胜的开端。`
+    prompt += `\n\n这是全局的第一部分，请设定一个符合体裁的开端（故事引言、或文档总述）。`
   } else if (req.chapterIndex === req.totalChapters - 1) {
-    prompt += `\n\n这是故事的最后一章，请给故事一个平和、圆满的收尾。`
+    prompt += `\n\n这是全局的最后一部分，请给出一个符合体裁的圆满收尾或总结。`
   } else {
-    prompt += `\n\n请承接上文，自然地继续故事。`
+    prompt += `\n\n请承接上文，自然地继续撰写。`
   }
 
   return prompt
