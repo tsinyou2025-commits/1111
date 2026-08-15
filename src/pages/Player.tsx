@@ -78,7 +78,7 @@ export default function Player() {
     : []
   const paragraphsAndSentences = paragraphs.map(para => ({
     text: para,
-    sentences: para.match(/[^\u3002\uff01\uff1f.!?]+[\u3002\uff01\uff1f.!?]+/g) || [para],
+    sentences: para.match(/[^\u3002\uff01\uff1f!?]+[\u3002\uff01\uff1f!?]+/g) || [para],
   }))
 
   // 当后台播放章节自动切换时，如果用户没有在浏览其他章节，则自动跟随

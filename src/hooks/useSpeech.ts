@@ -39,7 +39,7 @@ function splitSentences(text: string): string[] {
   const paragraphs = text.split(/\n\n+/).filter(p => p.trim())
   const allSentences: string[] = []
   for (const para of paragraphs) {
-    const sentences = para.match(/[^\u3002\uff01\uff1f.!?]+[\u3002\uff01\uff1f.!?]+/g) || [para]
+    const sentences = para.match(/[^\u3002\uff01\uff1f!?]+[\u3002\uff01\uff1f!?]+/g) || [para]
     allSentences.push(...sentences.filter(s => s.trim().length > 0))
   }
   return allSentences
