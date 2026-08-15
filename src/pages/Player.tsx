@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   Circle,
   RefreshCw,
+  Download,
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useSpeech } from '@/hooks/useSpeech'
@@ -605,6 +606,26 @@ export default function Player() {
     )
   }
 
+  const exportToTxt = () => {
+    let text = `${currentStory.title || currentStory.theme}\n\n`
+    currentStory.chapters.forEach(c => {
+      text += `=== ${c.title} ===\n\n`
+      if (c.content) {
+        text += `${c.content}\n\n`
+      } else {
+        text += `[本章尚未生成]\n\n`
+      }
+    })
+    
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${currentStory.title || currentStory.theme || '导出故事'}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* 顶部栏 */}
@@ -626,13 +647,31 @@ export default function Player() {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowChapters(!showChapters)}
-          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors md:hidden"
-        >
-          <List size={20} />
-        </button>
-        <div className="w-20 hidden md:block" />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportToTxt}
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors"
+            title="导出文本"
+          >
+            <Download size={20} />
+          </button>
+          <button
+            onClick={() => setShowChapters(!showChapters)}
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors md:hidden"
+          >
+            <List size={20} />
+          </button>
+        </div>
+        <div className="w-20 hidden md:block">
+          <button
+            onClick={exportToTxt}
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors hidden md:flex items-center gap-2 ml-auto"
+            title="导出为TXT"
+          >
+            <Download size={18} />
+            <span className="text-sm">导出文本</span>
+          </button>
+        </div>
       </div>
 
       {/* 进度条 */}
