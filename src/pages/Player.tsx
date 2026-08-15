@@ -798,42 +798,48 @@ export default function Player() {
                     settings.fontSize === 'small' && 'text-base',
                     settings.fontSize === 'large' && 'text-2xl'
                   )}>
-                    {viewingChapter.content ? (
-                      paragraphsAndSentences.map((para, pIdx) => {
-                        // 计算该段落第一句的全局索引
-                        let globalStart = 0
-                        for (let i = 0; i < pIdx; i++) {
-                          globalStart += paragraphsAndSentences[i].sentences.length
-                        }
-                        return (
-                          <p key={pIdx} style={{ textIndent: '2em' }}>
-                            {para.sentences.map((s, sIdx) => {
-                              const globalIdx = globalStart + sIdx
-                              return (
-                                <span
-                                  key={sIdx}
-                                  data-sentence-active={viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence}
-                                  onClick={() => {
-                                    stop()
-                                    setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true, currentSentenceIndex: globalIdx })
-                                    speakingChapterRef.current = viewingChapterIndex
-                                    justStartedSpeakingRef.current = true
-                                    setTimeout(() => speak(viewingChapter.content, globalIdx, { storyTitle: currentStory.title, chapterTitle: viewingChapter.title }), 100)
-                                  }}
-                                  className={cn(
-                                    'transition-colors duration-300 cursor-pointer rounded px-0.5',
-                                    viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence
-                                      ? 'text-amber-300 bg-amber-500/10'
-                                      : 'hover:bg-slate-700/40 hover:text-slate-100'
-                                  )}
-                                >
-                                  {s}
-                                </span>
-                              )
-                            })}
-                          </p>
-                        )
-                      })
+                    {viewingChapter.status === 'completed' || viewingChapter.content ? (
+                      viewingChapter.content ? (
+                        paragraphsAndSentences.map((para, pIdx) => {
+                          // 计算该段落第一句的全局索引
+                          let globalStart = 0
+                          for (let i = 0; i < pIdx; i++) {
+                            globalStart += paragraphsAndSentences[i].sentences.length
+                          }
+                          return (
+                            <p key={pIdx} style={{ textIndent: '2em' }}>
+                              {para.sentences.map((s, sIdx) => {
+                                const globalIdx = globalStart + sIdx
+                                return (
+                                  <span
+                                    key={sIdx}
+                                    data-sentence-active={viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence}
+                                    onClick={() => {
+                                      stop()
+                                      setCurrentStory({ currentChapterIndex: viewingChapterIndex, isPlaying: true, currentSentenceIndex: globalIdx })
+                                      speakingChapterRef.current = viewingChapterIndex
+                                      justStartedSpeakingRef.current = true
+                                      setTimeout(() => speak(viewingChapter.content, globalIdx, { storyTitle: currentStory.title, chapterTitle: viewingChapter.title }), 100)
+                                    }}
+                                    className={cn(
+                                      'transition-colors duration-300 cursor-pointer rounded px-0.5',
+                                      viewingChapterIndex === currentStory.currentChapterIndex && isSpeaking && s === currentSentence
+                                        ? 'text-amber-300 bg-amber-500/10'
+                                        : 'hover:bg-slate-700/40 hover:text-slate-100'
+                                    )}
+                                  >
+                                    {s}
+                                  </span>
+                                )
+                              })}
+                            </p>
+                          )
+                        })
+                      ) : (
+                        <div className="text-center py-12 text-slate-500 italic">
+                          (本部分无正文内容)
+                        </div>
+                      )
                     ) : (
                       viewingChapter.status === 'generating' ? (
                         <div className="text-center py-10">
