@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
 import { useAppStore, StoryChapter } from '@/store/appStore'
-import { getApiUrl } from '@/utils/apiBase'
+import { generateOutline as logicGenerateOutline, generateChapterStream } from '../../shared/storyLogic'
 
 interface UseStoryGeneratorReturn {
   isGenerating: boolean
@@ -33,27 +33,17 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
       const storyId = Date.now().toString()
 
       try {
-        const response = await fetch(getApiUrl('/api/story/outline'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            theme,
-            style,
-            customStylePrompt,
-            targetHours,
-            aiBaseUrl: settings.aiBaseUrl,
-            apiKey: settings.apiKey,
-            model: settings.model,
-          }),
+        const outline = await logicGenerateOutline({
+          theme,
+          style,
+          customStylePrompt,
+          targetHours,
+          aiBaseUrl: settings.aiBaseUrl,
+          apiKey: settings.apiKey,
+          model: settings.model,
         })
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}))
-          throw new Error(errData.error || `HTTP ${response.status}`)
-        }
-
-        const data = await response.json()
-        const chapters: StoryChapter[] = (data.chapters || []).map((ch: any) => ({
+        const chapters: StoryChapter[] = (outline.chapters || []).map((ch: any) => ({
           index: ch.index,
           title: ch.title || `第 ${ch.index + 1} 章`,
           summary: ch.summary || '',
@@ -78,7 +68,7 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
 
         setCurrentStory({
           id: storyId,
-          title: data.title || theme,
+          title: outline.title || theme,
           theme,
           style,
           customStylePrompt,
@@ -114,12 +104,7 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
 
         updateChapter(chapterIndex, { status: 'generating' })
 
-        const eventSource = new EventSourcePolyfill(getApiUrl('/api/story/generate'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+        const reqBody = {
             theme: currentStory.theme,
             style: currentStory.style,
             customStylePrompt: currentStory.customStylePrompt,
@@ -132,87 +117,62 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
             aiBaseUrl: settings.aiBaseUrl,
             apiKey: settings.apiKey,
             model: settings.model,
-          }),
-          signal: controller.signal,
-        })
+          }
 
-        let lastUpdateTime = 0
-
-        eventSource.addEventListener('text', (event: any) => {
-          try {
-            const data = JSON.parse(event.data)
-            fullContent += data.content
-            const now = Date.now()
-            const isBackground = useAppStore.getState().currentStory.isBatchGenerating && useAppStore.getState().currentStory.currentChapterIndex !== chapterIndex
-            const throttleTime = isBackground ? 2000 : 200
-            
-            if (now - lastUpdateTime > throttleTime) {
-              updateChapter(chapterIndex, {
+          let lastUpdateTime = 0
+          
+          // Using a mock abort feature by setting a flag, since fetch streams in storyLogic don't take AbortSignal yet.
+          // For now, if stopGenerating is called, we can set a ref and throw inside onText.
+          
+          generateChapterStream(
+            reqBody,
+            (contentChunk) => {
+              if (abortControllerRef.current?.signal.aborted) throw new Error("Aborted")
+              fullContent += contentChunk
+              const now = Date.now()
+              const isBackground = useAppStore.getState().currentStory.isBatchGenerating && useAppStore.getState().currentStory.currentChapterIndex !== chapterIndex
+              const throttleTime = isBackground ? 2000 : 200
+              
+              if (now - lastUpdateTime > throttleTime) {
+                updateChapter(chapterIndex, {
+                  content: fullContent,
+                  wordCount: fullContent.length,
+                })
+                lastUpdateTime = now
+              }
+            },
+            (summaryText) => {
+              if (abortControllerRef.current?.signal.aborted) throw new Error("Aborted")
+              summary = summaryText
+              updateChapter(chapterIndex, { summary })
+            },
+            () => {
+              if (abortControllerRef.current?.signal.aborted) throw new Error("Aborted")
+              updateChapter(chapterIndex, { 
                 content: fullContent,
                 wordCount: fullContent.length,
+                status: 'completed' 
               })
-              lastUpdateTime = now
+            },
+            (totalWords) => {
+              resolve({
+                content: fullContent,
+                summary,
+                wordCount: totalWords || fullContent.length,
+              })
+            },
+            (errStr) => {
+              if (fullContent.length > 100) {
+                resolve({ content: fullContent, summary, wordCount: fullContent.length })
+              } else {
+                updateChapter(chapterIndex, { status: 'pending' })
+                reject(new Error(errStr))
+              }
             }
-          } catch (e) {
-            console.error('Parse text error:', e)
-          }
-        })
-
-        eventSource.addEventListener('summary', (event: any) => {
-          try {
-            const data = JSON.parse(event.data)
-            summary = data.content
-            updateChapter(chapterIndex, { summary })
-          } catch (e) {
-            console.error('Parse summary error:', e)
-          }
-        })
-
-        eventSource.addEventListener('text_done', (event: any) => {
-          updateChapter(chapterIndex, { 
-            content: fullContent,
-            wordCount: fullContent.length,
-            status: 'completed' 
+          ).catch((e) => {
+             updateChapter(chapterIndex, { status: 'pending' })
+             reject(e)
           })
-        })
-
-        eventSource.addEventListener('done', (event: any) => {
-          try {
-            const data = JSON.parse(event.data)
-            eventSource.close()
-            resolve({
-              content: fullContent,
-              summary,
-              wordCount: data.totalWords || fullContent.length,
-            })
-          } catch (e) {
-            eventSource.close()
-            resolve({ content: fullContent, summary, wordCount: fullContent.length })
-          }
-        })
-
-        eventSource.addEventListener('error', (event: any) => {
-          try {
-            const data = JSON.parse(event.data)
-            eventSource.close()
-            updateChapter(chapterIndex, { status: 'pending' })
-            reject(new Error(data.error || '生成失败'))
-          } catch {
-            eventSource.close()
-            updateChapter(chapterIndex, { status: 'pending' })
-            reject(new Error('网络错误'))
-          }
-        })
-
-        eventSource.onerror = () => {
-          eventSource.close()
-          if (fullContent.length > 100) {
-            resolve({ content: fullContent, summary, wordCount: fullContent.length })
-          } else {
-            updateChapter(chapterIndex, { status: 'pending' })
-            reject(new Error('连接中断'))
-          }
-        }
       })
     },
     [settings.aiBaseUrl, settings.apiKey, settings.model, currentStory, updateChapter]
@@ -304,115 +264,5 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
     stopGenerating,
     startBatchGeneration,
     stopBatchGeneration,
-  }
-}
-
-class EventSourcePolyfill {
-  private url: string
-  private method: string
-  private headers: Record<string, string>
-  private body: string
-  private signal?: AbortSignal
-  private listeners: Record<string, ((event: any) => void)[]> = {}
-  private readyState: number = 0
-  public onerror: ((event: any) => void) | null = null
-  public onmessage: ((event: any) => void) | null = null
-
-  constructor(url: string, options: any = {}) {
-    this.url = url
-    this.method = options.method || 'GET'
-    this.headers = options.headers || {}
-    this.body = options.body || ''
-    this.signal = options.signal
-    this.readyState = 0
-    this.stream()
-  }
-
-  addEventListener(type: string, callback: (event: any) => void) {
-    if (!this.listeners[type]) {
-      this.listeners[type] = []
-    }
-    this.listeners[type].push(callback)
-  }
-
-  removeEventListener(type: string, callback: (event: any) => void) {
-    if (this.listeners[type]) {
-      this.listeners[type] = this.listeners[type].filter((cb) => cb !== callback)
-    }
-  }
-
-  private dispatchEvent(type: string, data: any) {
-    if (this.listeners[type]) {
-      this.listeners[type].forEach((cb) => cb(data))
-    }
-    if (type === 'message' && this.onmessage) {
-      this.onmessage(data)
-    }
-  }
-
-  private async stream() {
-    try {
-      const response = await fetch(this.url, {
-        method: this.method,
-        headers: this.headers,
-        body: this.body,
-        signal: this.signal,
-      })
-
-      if (!response.ok) {
-        this.readyState = 2
-        const error = await response.text().catch(() => '')
-        this.dispatchEvent('error', { data: JSON.stringify({ error: `HTTP ${response.status}: ${error}` }) })
-        if (this.onerror) this.onerror({})
-        return
-      }
-
-      this.readyState = 1
-      const reader = response.body?.getReader()
-      if (!reader) {
-        this.readyState = 2
-        if (this.onerror) this.onerror({})
-        return
-      }
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-      let eventType = 'message'
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) {
-          this.readyState = 2
-          break
-        }
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (line === '') {
-            eventType = 'message'
-            continue
-          }
-          if (line.startsWith('event:')) {
-            eventType = line.slice(6).trim()
-          } else if (line.startsWith('data:')) {
-            const data = line.slice(5).trim()
-            this.dispatchEvent(eventType, { data })
-          }
-        }
-      }
-    } catch (err) {
-      this.readyState = 2
-      if (this.onerror) this.onerror({})
-    }
-  }
-
-  close() {
-    this.readyState = 2
-    if (this.signal) {
-      ;(this.signal as any).abort?.()
-    }
   }
 }

@@ -4,6 +4,7 @@ import { useAppStore } from '@/store/appStore'
 import { useSpeech } from '@/hooks/useSpeech'
 import { cn } from '@/lib/utils'
 import { getApiUrl, isElectron, isCapacitor } from '@/utils/apiBase'
+import { getModels } from '../../shared/storyLogic'
 import { App as CapacitorApp } from '@capacitor/app'
 
 
@@ -121,8 +122,7 @@ export default function Settings() {
     setLoadingModels(true)
     setModelList([])
     try {
-      const res = await fetch(getApiUrl(`/api/story/models?baseUrl=${encodeURIComponent(localSettings.aiBaseUrl)}&apiKey=${encodeURIComponent(localSettings.apiKey)}`))
-      const data = await res.json()
+      const data = await getModels(localSettings.aiBaseUrl, localSettings.apiKey)
       if (data.data && Array.isArray(data.data)) {
         setModelList(data.data.map((m: any) => m.id))
       }
