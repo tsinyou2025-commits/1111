@@ -178,6 +178,11 @@ export default function Home() {
         const end = i < matches.length - 1 ? matches[i+1].index : text.length
         const content = text.slice(start, end).trim()
         
+        // 过滤掉目录中的纯标题（没有正文的章节，例如纯目录列表）
+        if (content.length < 10) {
+          continue
+        }
+        
         chapters.push({
           index: chapters.length,
           title: matches[i].title.replace(/^#\s*/, ''),
