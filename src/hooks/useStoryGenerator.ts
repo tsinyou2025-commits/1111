@@ -257,7 +257,7 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
     const queue: number[] = []
     const chapters = useAppStore.getState().currentStory.chapters
     for (let i = startIndex; i < Math.min(chapters.length, startIndex + count); i++) {
-      if (chapters[i].status === 'pending' || chapters[i].status === 'error') {
+      if (chapters[i].status === 'pending') {
         queue.push(i)
       }
     }
