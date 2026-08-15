@@ -37,7 +37,7 @@ export default function Player() {
   const isVisible = location.pathname === '/player'
   const { currentStory, settings, addToHistory, setCurrentStory, updateChapter } = useAppStore()
   const { isSpeaking, isPaused, speak, pause, resume, stop, currentSentence, currentSentenceIndex: speechSentenceIndex, availableVoices, setOnChapterEnd } = useSpeech()
-  const { isGenerating, isGeneratingOutline, error, generateChapter, stopGenerating } = useStoryGenerator()
+  const { isGenerating, isGeneratingOutline, error, generateChapter, stopGenerating, startBatchGeneration, stopBatchGeneration } = useStoryGenerator()
   const generateChapterRef = useRef(generateChapter)
   generateChapterRef.current = generateChapter
 
@@ -674,8 +674,24 @@ export default function Player() {
         </div>
       </div>
 
+      {/* 批量生成进度台 */}
+      {currentStory.isBatchGenerating && (
+        <div className="bg-slate-800/80 border-b border-slate-700/50 px-4 py-2 flex items-center justify-between text-xs text-slate-300">
+          <div className="flex items-center gap-2">
+            <Loader2 size={14} className="animate-spin text-amber-500" />
+            <span>正在后台静默批量生成（队列剩余：{currentStory.generationQueue.length} 章）</span>
+          </div>
+          <button
+            onClick={stopBatchGeneration}
+            className="text-amber-500 hover:text-amber-400 font-medium px-2 py-1 rounded hover:bg-slate-700/50 transition-colors"
+          >
+            停止批量生成
+          </button>
+        </div>
+      )}
+
       {/* 进度条 */}
-      {isGenerating && (
+      {isGenerating && !currentStory.isBatchGenerating && (
         <div className="h-1 bg-slate-800 overflow-hidden">
           <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 animate-pulse" style={{ width: '60%' }} />
         </div>
@@ -833,6 +849,15 @@ export default function Player() {
                           >
                             <RefreshCw size={16} />
                             提前生成本章 (不影响当前朗读)
+                          </button>
+                          
+                          <button
+                            onClick={() => startBatchGeneration(viewingChapterIndex, 10)}
+                            disabled={currentStory.isBatchGenerating}
+                            className="px-6 py-2.5 rounded-full bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors inline-flex items-center gap-2 border border-amber-500/30 disabled:opacity-50"
+                          >
+                            <List size={16} />
+                            {currentStory.isBatchGenerating ? '批量生成中...' : '静默批量生成接下来10章'}
                           </button>
                           <span className="text-xs text-slate-600 mt-2">提示：也可以直接点击顶部【从本章开始播放】</span>
                         </div>

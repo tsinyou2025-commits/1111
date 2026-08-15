@@ -52,6 +52,8 @@ interface AppState {
     isPlaying: boolean
     currentSentenceIndex: number
     totalWords: number
+    generationQueue: number[]
+    isBatchGenerating: boolean
   }
   history: StoryHistory[]
   setSettings: (settings: Partial<AppSettings>) => void
@@ -96,6 +98,8 @@ export const useAppStore = create<AppState>()(
         isPlaying: false,
         currentSentenceIndex: 0,
         totalWords: 0,
+        generationQueue: [],
+        isBatchGenerating: false,
       },
       history: [],
       setSettings: (newSettings) =>

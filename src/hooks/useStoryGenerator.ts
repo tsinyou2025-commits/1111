@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, useEffect } from 'react'
 import { useAppStore, StoryChapter } from '@/store/appStore'
 import { getApiUrl } from '@/utils/apiBase'
 
@@ -9,6 +9,8 @@ interface UseStoryGeneratorReturn {
   generateOutline: (theme: string, style: string, customStylePrompt: string, targetHours: number) => Promise<boolean>
   generateChapter: (chapterIndex: number) => Promise<void>
   stopGenerating: () => void
+  startBatchGeneration: (startIndex: number, count?: number) => void
+  stopBatchGeneration: () => void
 }
 
 export function useStoryGenerator(): UseStoryGeneratorReturn {
@@ -141,7 +143,10 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
             const data = JSON.parse(event.data)
             fullContent += data.content
             const now = Date.now()
-            if (now - lastUpdateTime > 200) {
+            const isBackground = useAppStore.getState().currentStory.isBatchGenerating && useAppStore.getState().currentStory.currentChapterIndex !== chapterIndex
+            const throttleTime = isBackground ? 2000 : 200
+            
+            if (now - lastUpdateTime > throttleTime) {
               updateChapter(chapterIndex, {
                 content: fullContent,
                 wordCount: fullContent.length,
@@ -245,8 +250,50 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
     }
     setIsGenerating(false)
     setIsGeneratingOutline(false)
-    setCurrentStory({ isGenerating: false })
+    setCurrentStory({ isGenerating: false, isBatchGenerating: false, generationQueue: [] })
   }, [setCurrentStory])
+
+  const startBatchGeneration = useCallback((startIndex: number, count: number = 10) => {
+    const queue: number[] = []
+    const chapters = useAppStore.getState().currentStory.chapters
+    for (let i = startIndex; i < Math.min(chapters.length, startIndex + count); i++) {
+      if (chapters[i].status === 'pending' || chapters[i].status === 'error') {
+        queue.push(i)
+      }
+    }
+    if (queue.length > 0) {
+      setCurrentStory({ generationQueue: queue, isBatchGenerating: true })
+    }
+  }, [setCurrentStory])
+
+  const stopBatchGeneration = useCallback(() => {
+    setCurrentStory({ generationQueue: [], isBatchGenerating: false })
+  }, [setCurrentStory])
+
+  // Process the queue
+  useEffect(() => {
+    const state = useAppStore.getState().currentStory
+    if (state.isBatchGenerating && !state.isGenerating && state.generationQueue.length > 0) {
+      const nextIndex = state.generationQueue[0]
+      
+      const processNext = async () => {
+        try {
+          await generateChapter(nextIndex)
+        } finally {
+          const currentQueue = useAppStore.getState().currentStory.generationQueue
+          if (currentQueue.includes(nextIndex)) {
+            const newQueue = currentQueue.filter(i => i !== nextIndex)
+            setCurrentStory({ 
+              generationQueue: newQueue,
+              isBatchGenerating: newQueue.length > 0 
+            })
+          }
+        }
+      }
+      
+      processNext()
+    }
+  }, [currentStory.isBatchGenerating, currentStory.isGenerating, currentStory.generationQueue, generateChapter, setCurrentStory])
 
   return {
     isGenerating,
@@ -255,6 +302,8 @@ export function useStoryGenerator(): UseStoryGeneratorReturn {
     generateOutline,
     generateChapter,
     stopGenerating,
+    startBatchGeneration,
+    stopBatchGeneration,
   }
 }
 
