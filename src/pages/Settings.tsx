@@ -119,6 +119,7 @@ export default function Settings() {
     if (!localSettings.aiBaseUrl || !localSettings.apiKey) return
     
     setLoadingModels(true)
+    setModelList([])
     try {
       const res = await fetch(getApiUrl(`/api/story/models?baseUrl=${encodeURIComponent(localSettings.aiBaseUrl)}&apiKey=${encodeURIComponent(localSettings.apiKey)}`))
       const data = await res.json()
